@@ -83,6 +83,11 @@ export class GameEngine {
       ['говорить', 'сказать']
     );
     
+    this.commandParser.registerCommand('talk', this.cmdTalk.bind(this), 
+      'поговорить с конкретным НПС', 
+      ['поговорить']
+    );
+    
     this.commandParser.registerCommand('use', this.cmdUse.bind(this), 
       'использовать предмет', 
       ['использовать']
@@ -450,6 +455,30 @@ export class GameEngine {
     }
     
     return result;
+  }
+
+  /**
+   * Команда: talk - поговорить с НПС
+   */
+  cmdTalk(cmd) {
+    if (!cmd.target) {
+      return 'С кем вы хотите поговорить?';
+    }
+
+    const currentRoom = this.getCurrentRoom();
+    const target = cmd.target.toLowerCase();
+
+    const npcId = currentRoom.npcs.find(npcId => {
+      const npc = this.getNpc(npcId);
+      return npc && npc.name.toLowerCase().includes(target) && npc.isAlive();
+    });
+
+    if (!npcId) {
+      return `Здесь нет никого по имени "${cmd.target}".`;
+    }
+
+    const npc = this.getNpc(npcId);
+    return npc.speak(this);
   }
 
   /**

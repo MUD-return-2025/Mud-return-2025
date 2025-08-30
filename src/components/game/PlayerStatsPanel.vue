@@ -136,6 +136,32 @@ const moveToRoom = (roomId) => {
     emit('command', `Ошибка: ${result.message}`);
   }
 };
+
+/** @type {import('vue').ComputedRef<import('../../game/classes/Room').Room | null>} */
+const currentRoom = computed(() => {
+  if (!props.gameStarted || !props.player.currentRoom) return null;
+  // Make this computed property reactive to player's room changes
+  return props.gameEngine.rooms.get(props.player.currentRoom);
+});
+
+/** @type {import('vue').ComputedRef<import('../../game/classes/NPC').NPC[]>} */
+const npcsInRoom = computed(() => {
+  if (!currentRoom.value) return [];
+  return currentRoom.value.npcs
+    .map(npcId => props.gameEngine.getNpc(npcId))
+    .filter(npc => npc && npc.isAlive());
+});
+
+/** @type {import('vue').ComputedRef<Object[]>} */
+const itemsInRoom = computed(() => {
+  if (!currentRoom.value) return [];
+  return currentRoom.value.items
+    .map(itemId => props.gameEngine.getItem(itemId))
+    .filter(Boolean);
+});
+
+const hasTrader = computed(() => npcsInRoom.value.some(npc => npc.canTrade && npc.canTrade()));
+const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
 </script>
 
 <template>
@@ -292,7 +318,7 @@ const moveToRoom = (roomId) => {
         </div>
 
         <!-- Вкладка "Мини-карта" -->
-        <div v-if="activeTab === 'map'" class="tab-content">
+        <div v-if="activeTab === 'map'" class="map-tab-content">
           <div class="minimap">
             <div class="minimap-grid">
               <!-- Северные ворота -->
@@ -392,6 +418,38 @@ const moveToRoom = (roomId) => {
                 <span class="legend-color unavailable"></span>
                 <span>Недоступна</span>
               </div>
+            </div>
+          </div>
+
+          <div class="map-actions">
+            <h4>Действия</h4>
+            <div class="action-buttons">
+              <button @click="$emit('command', 'look')">👁️ Осмотреться</button>
+              <button @click="$emit('command', 'save')">💾 Сохранить</button>
+              <button @click="$emit('command', 'help')">❓ Помощь</button>
+              
+              <hr v-if="hasTrader || hasHealer || npcsInRoom.length || itemsInRoom.length" class="actions-divider" />
+
+              <button v-if="hasTrader" @click="$emit('command', 'list')">💰 Торговать</button>
+              <button v-if="hasHealer" @click="$emit('command', 'heal')">✨ Исцелиться</button>
+              
+              <template v-for="npc in npcsInRoom" :key="npc.id">
+                <button v-if="npc.type === 'hostile'" @click="$emit('command', 'kill ' + npc.name)">
+                  ⚔️ Убить {{ npc.name }}
+                </button>
+                <button v-else-if="!npc.canTrade && !npc.canHeal" @click="$emit('command', 'talk ' + npc.name)">
+                  💬 Поговорить с {{ npc.name }}
+                </button>
+              </template>
+
+              <template v-for="item in itemsInRoom" :key="item.id">
+                <button @click="$emit('command', 'look ' + item.name)">
+                  👁️ Осмотреть {{ item.name }}
+                </button>
+                <button @click="$emit('command', 'get ' + item.name)">
+                  ✋ Взять {{ item.name }}
+                </button>
+              </template>
             </div>
           </div>
         </div>
@@ -690,6 +748,10 @@ const moveToRoom = (roomId) => {
 }
 
 /* Мини-карта */
+.map-tab-content {
+  padding: 10px;
+}
+
 .minimap {
   display: flex;
   justify-content: center;
@@ -772,6 +834,33 @@ const moveToRoom = (roomId) => {
 
 .legend-color.unavailable {
   background-color: #333;
+}
+
+.map-actions {
+  margin-top: 20px;
+  border-top: 1px solid #00ff00;
+  padding-top: 10px;
+}
+
+.map-actions h4 {
+  color: #ffff00;
+  margin: 0 0 10px 0;
+  font-size: 12px;
+}
+
+.action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.action-buttons button {
+  font-size: 11px;
+}
+
+.actions-divider {
+  width: 100%;
+  border-color: #004400;
 }
 
 /* Прокрутка */
