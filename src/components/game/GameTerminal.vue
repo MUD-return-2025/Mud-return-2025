@@ -26,7 +26,6 @@
     </div>
 
     <PlayerStatsPanel
-      v-if="!isFullscreen"
       :player="player" 
       :game-started="gameStarted"
       :game-engine="gameEngine"

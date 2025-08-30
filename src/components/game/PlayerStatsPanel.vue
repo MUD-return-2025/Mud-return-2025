@@ -1,6 +1,12 @@
 <script setup>
+// Компонент Vue для отображения панели статистики игрока, инвентаря, экипировки и карты.
 import { ref, computed, inject } from 'vue';
 
+/**
+ * @property {Object} player - Объект с данными игрока.
+ * @property {Boolean} gameStarted - Флаг, указывающий, началась ли игра.
+ * @property {Object} gameEngine - Экземпляр игрового движка.
+ */
 const props = defineProps({
   player: {
     type: Object,
@@ -16,12 +22,20 @@ const props = defineProps({
   }
 });
 
+/**
+ * @emits command - Событие для отправки команды в игровой движок.
+ * @emits move - Событие для перемещения игрока.
+ */
 const emit = defineEmits(['command', 'move']);
 
+/** @type {import('vue').Ref<boolean>} Состояние панели (свернута/развернута) */
 const isExpanded = ref(true);
+/** @type {import('vue').Ref<string>} Активная вкладка */
 const activeTab = ref('stats');
+/** @type {import('vue').Ref<Object|null>} Выбранный предмет в инвентаре */
 const selectedItem = ref(null);
 
+/** @type {Array<{id: string, name: string}>} Массив вкладок панели */
 const tabs = [
   { id: 'stats', name: 'Статистика' },
   { id: 'inventory', name: 'Инвентарь' },
@@ -29,18 +43,33 @@ const tabs = [
   { id: 'map', name: 'Карта' }
 ];
 
+/**
+ * Переключает состояние панели (свернута/развернута).
+ */
 const togglePanel = () => {
   isExpanded.value = !isExpanded.value;
 };
 
+/**
+ * Выбирает или снимает выбор с предмета в инвентаре.
+ * @param {Object} item - Объект предмета.
+ */
 const selectItem = (item) => {
   selectedItem.value = selectedItem.value?.id === item.id ? null : item;
 };
 
+/**
+ * Рассчитывает общий вес предметов в инвентаре.
+ * @returns {number} Общий вес.
+ */
 const getTotalWeight = () => {
   return props.player.inventory.reduce((total, item) => total + (item.weight || 0), 0);
 };
 
+/**
+ * Рассчитывает урон игрока.
+ * @returns {string} Строка, представляющая урон (например, "1d6+2").
+ */
 const getPlayerDamage = () => {
   let baseDamage = '1d6';
   const strBonus = Math.floor((props.player.strength - 10) / 2);
@@ -58,6 +87,10 @@ const getPlayerDamage = () => {
   return baseDamage;
 };
 
+/**
+ * Рассчитывает защиту игрока.
+ * @returns {number} Значение защиты.
+ */
 const getPlayerDefense = () => {
   let defense = 10 + Math.floor((props.player.dexterity - 10) / 2);
 
@@ -69,16 +102,30 @@ const getPlayerDefense = () => {
 };
 
 // Методы для работы с картой
+/**
+ * Проверяет, доступна ли комната для посещения.
+ * @param {string} roomId - ID комнаты.
+ * @returns {boolean} true, если комната доступна.
+ */
 const isRoomAvailable = (roomId) => {
   if (!props.gameStarted) return false;
   const availableRooms = props.gameEngine.getAvailableRooms();
   return availableRooms.includes(roomId);
 };
 
+/**
+ * Проверяет, можно ли кликнуть по комнате для перемещения.
+ * @param {string} roomId - ID комнаты.
+ * @returns {boolean} true, если по комнате можно кликнуть.
+ */
 const isRoomClickable = (roomId) => {
   return props.gameStarted && roomId !== props.player.currentRoom && isRoomAvailable(roomId);
 };
 
+/**
+ * Инициирует перемещение в указанную комнату.
+ * @param {string} roomId - ID комнаты.
+ */
 const moveToRoom = (roomId) => {
   if (!isRoomClickable(roomId)) return;
 
@@ -364,7 +411,7 @@ const moveToRoom = (roomId) => {
   border: 2px solid #00ff00;
   font-family: 'Courier New', monospace;
   font-size: 12px;
-  z-index: 1000;
+  z-index: 2001;
   border-radius: 4px;
   overflow: hidden;
 }
