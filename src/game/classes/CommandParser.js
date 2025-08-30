@@ -94,12 +94,45 @@ export class CommandParser {
   }
 
   /**
-   * Регистрирует обработчик команды
+   * Регистрирует обработчик команды с описанием
    * @param {string} commandName - название команды
    * @param {Function} handler - функция-обработчик
+   * @param {string} description - описание команды для справки
+   * @param {Array<string>} aliases - массив алиасов для отображения в справке
    */
-  registerCommand(commandName, handler) {
-    this.commands.set(commandName, handler);
+  registerCommand(commandName, handler, description = '', aliases = []) {
+    this.commands.set(commandName, {
+      handler: handler,
+      description: description,
+      aliases: aliases
+    });
+  }
+
+  /**
+   * Генерирует справку на основе зарегистрированных команд
+   * @returns {string} текст справки
+   */
+  generateHelp() {
+    let helpText = '=== СПРАВКА ===\n';
+    
+    // Сортируем команды для стабильного порядка
+    const sortedCommands = Array.from(this.commands.entries()).sort((a, b) => a[0].localeCompare(b[0]));
+    
+    for (const [commandName, commandData] of sortedCommands) {
+      if (commandData.description) {
+        let line = `• ${commandName}`;
+        
+        // Добавляем алиасы, если есть
+        if (commandData.aliases && commandData.aliases.length > 0) {
+          line += ` (${commandData.aliases.join(', ')})`;
+        }
+        
+        line += ` - ${commandData.description}`;
+        helpText += line + '\n';
+      }
+    }
+    
+    return helpText;
   }
 
   /**
@@ -109,10 +142,12 @@ export class CommandParser {
    * @returns {string} результат выполнения команды
    */
   executeCommand(parsedCommand, game) {
-    const handler = this.commands.get(parsedCommand.command);
+    const commandData = this.commands.get(parsedCommand.command);
 
-    if (handler) {
+    if (commandData) {
       try {
+        // Поддерживаем как старый формат (функция), так и новый (объект)
+        const handler = typeof commandData === 'function' ? commandData : commandData.handler;
         return handler(parsedCommand, game);
       } catch (error) {
         console.error('Ошибка выполнения команды:', error);

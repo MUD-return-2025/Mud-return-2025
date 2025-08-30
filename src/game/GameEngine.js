@@ -45,24 +45,95 @@ export class GameEngine {
    * Регистрирует все игровые команды
    */
   registerCommands() {
-    this.commandParser.registerCommand('look', this.cmdLook.bind(this));
-    this.commandParser.registerCommand('go', this.cmdGo.bind(this));
-    this.commandParser.registerCommand('get', this.cmdGet.bind(this));
-    this.commandParser.registerCommand('drop', this.cmdDrop.bind(this));
-    this.commandParser.registerCommand('inventory', this.cmdInventory.bind(this));
-    this.commandParser.registerCommand('kill', this.cmdKill.bind(this));
-    this.commandParser.registerCommand('say', this.cmdSay.bind(this));
-    this.commandParser.registerCommand('use', this.cmdUse.bind(this));
-    this.commandParser.registerCommand('stats', this.cmdStats.bind(this));
-    this.commandParser.registerCommand('help', this.cmdHelp.bind(this));
-    this.commandParser.registerCommand('save', this.cmdSave.bind(this));
-    this.commandParser.registerCommand('load', this.cmdLoad.bind(this));
-    this.commandParser.registerCommand('heal', this.cmdHeal.bind(this));
-    this.commandParser.registerCommand('equip', this.cmdEquip.bind(this));
-    this.commandParser.registerCommand('unequip', this.cmdUnequip.bind(this));
-    this.commandParser.registerCommand('list', this.cmdList.bind(this));
-    this.commandParser.registerCommand('buy', this.cmdBuy.bind(this));
-    this.commandParser.registerCommand('sell', this.cmdSell.bind(this));
+    this.commandParser.registerCommand('look', this.cmdLook.bind(this), 
+      'осмотреться вокруг или изучить предмет/НПС', 
+      ['л', 'смотреть', 'осмотреть']
+    );
+    
+    this.commandParser.registerCommand('go', this.cmdGo.bind(this), 
+      'идти в указанном направлении (север/юг/восток/запад)', 
+      ['идти', 'иди', 'с', 'ю', 'в', 'з', 'север', 'юг', 'восток', 'запад']
+    );
+    
+    this.commandParser.registerCommand('get', this.cmdGet.bind(this), 
+      'взять предмет', 
+      ['взять']
+    );
+    
+    this.commandParser.registerCommand('drop', this.cmdDrop.bind(this), 
+      'бросить предмет', 
+      ['бросить']
+    );
+    
+    this.commandParser.registerCommand('inventory', this.cmdInventory.bind(this), 
+      'показать инвентарь', 
+      ['inv', 'и', 'инвентарь']
+    );
+    
+    this.commandParser.registerCommand('kill', this.cmdKill.bind(this), 
+      'атаковать цель', 
+      ['убить', 'атаковать']
+    );
+    
+    this.commandParser.registerCommand('say', this.cmdSay.bind(this), 
+      'поговорить с НПС', 
+      ['говорить', 'сказать']
+    );
+    
+    this.commandParser.registerCommand('use', this.cmdUse.bind(this), 
+      'использовать предмет', 
+      ['использовать']
+    );
+    
+    this.commandParser.registerCommand('stats', this.cmdStats.bind(this), 
+      'показать характеристики игрока', 
+      ['статы', 'характеристики']
+    );
+    
+    this.commandParser.registerCommand('help', this.cmdHelp.bind(this), 
+      'показать эту справку', 
+      ['помощь', 'справка']
+    );
+    
+    this.commandParser.registerCommand('save', this.cmdSave.bind(this), 
+      'сохранить игру', 
+      ['сохранить']
+    );
+    
+    this.commandParser.registerCommand('load', this.cmdLoad.bind(this), 
+      'загрузить игру', 
+      ['загрузить']
+    );
+    
+    this.commandParser.registerCommand('heal', this.cmdHeal.bind(this), 
+      'исцелиться у жреца', 
+      ['исцелить']
+    );
+    
+    this.commandParser.registerCommand('equip', this.cmdEquip.bind(this), 
+      'экипировать оружие или броню', 
+      ['экипировать']
+    );
+    
+    this.commandParser.registerCommand('unequip', this.cmdUnequip.bind(this), 
+      'снять экипированный предмет', 
+      ['снять']
+    );
+    
+    this.commandParser.registerCommand('list', this.cmdList.bind(this), 
+      'посмотреть товары торговца', 
+      ['список']
+    );
+    
+    this.commandParser.registerCommand('buy', this.cmdBuy.bind(this), 
+      'купить товар у торговца', 
+      ['купить']
+    );
+    
+    this.commandParser.registerCommand('sell', this.cmdSell.bind(this), 
+      'продать предмет торговцу', 
+      ['продать']
+    );
   }
 
   /**
@@ -426,35 +497,7 @@ export class GameEngine {
    * Команда: help - справка
    */
   cmdHelp() {
-    return `=== СПРАВКА ===
-Основные команды:
-• look (l) - осмотреться вокруг
-• look <предмет/НПС> - осмотреть что-то конкретное
-• go <направление> - идти в указанном направлении (север/юг/восток/запад)
-• get <предмет> - взять предмет
-• drop <предмет> - бросить предмет
-• inventory (inv) - показать инвентарь
-• stats - показать характеристики
-• kill <цель> - атаковать цель
-• say <сообщение> - поговорить с НПС
-• use <предмет> - использовать предмет
-• equip <предмет> - экипировать оружие/броню
-• unequip <weapon/armor> - снять экипировку
-• list - посмотреть товары торговца
-• buy <товар> - купить товар у торговца
-• sell <предмет> - продать предмет торговцу
-• heal - исцелиться у жреца
-• save - сохранить игру
-• load - загрузить игру
-• help - эта справка
-
-Сокращения:
-• л - look
-• север/с - go north
-• юг/ю - go south  
-• восток/в - go east
-• запад/з - go west
-• инв - inventory`;
+    return this.commandParser.generateHelp();
   }
 
   /**
