@@ -13,30 +13,49 @@ export class CommandParser {
    * Инициализация базовых команд и их алиасов
    */
   initializeCommands() {
-    // Регистрируем алиасы для удобства игрока
-    this.aliases.set('l', 'look');
-    this.aliases.set('смотреть', 'look');
-    this.aliases.set('осмотреть', 'look');
-    this.aliases.set('идти', 'go');
-    this.aliases.set('север', 'go north');
-    this.aliases.set('юг', 'go south');
-    this.aliases.set('восток', 'go east');
-    this.aliases.set('запад', 'go west');
-    this.aliases.set('с', 'go north');
-    this.aliases.set('ю', 'go south');
-    this.aliases.set('в', 'go east');
-    this.aliases.set('з', 'go west');
-    this.aliases.set('взять', 'get');
-    this.aliases.set('бросить', 'drop');
-    this.aliases.set('инвентарь', 'inventory');
-    this.aliases.set('inv', 'inventory');
-    this.aliases.set('и', 'inventory');
-    this.aliases.set('убить', 'kill');
-    this.aliases.set('атаковать', 'kill');
-    this.aliases.set('говорить', 'say');
-    this.aliases.set('использовать', 'use');
-    this.aliases.set('статы', 'stats');
-    this.aliases.set('характеристики', 'stats');
+    // Единый объект с алиасами
+    const shortcuts = {
+      'л': 'look',
+      'смотреть': 'look',
+      'осмотреть': 'look',
+      'идти': 'go',
+      'иди': 'go',
+      'север': 'go north',
+      'юг': 'go south',
+      'восток': 'go east',
+      'запад': 'go west',
+      'с': 'go north',
+      'ю': 'go south',
+      'в': 'go east',
+      'з': 'go west',
+      'взять': 'get',
+      'бросить': 'drop',
+      'инвентарь': 'inventory',
+      'inv': 'inventory',
+      'и': 'inventory',
+      'убить': 'kill',
+      'атаковать': 'kill',
+      'говорить': 'say',
+      'сказать': 'say',
+      'использовать': 'use',
+      'экипировать': 'equip',
+      'снять': 'unequip',
+      'купить': 'buy',
+      'продать': 'sell',
+      'список': 'list',
+      'статы': 'stats',
+      'характеристики': 'stats',
+      'исцелить': 'heal',
+      'сохранить': 'save',
+      'загрузить': 'load',
+      'помощь': 'help',
+      'справка': 'help'
+    };
+
+    // Заполняем Map алиасов
+    for (const [alias, command] of Object.entries(shortcuts)) {
+      this.aliases.set(alias, command);
+    }
   }
 
   /**
@@ -53,32 +72,17 @@ export class CommandParser {
     let command = parts[0];
     const args = parts.slice(1);
 
-    // Обработка сокращений команд
-    const shortcuts = {
-      'л': 'look',
-      'идти': 'go',
-      'иди': 'go',
-      'инв': 'inventory',
-      'взять': 'get',
-      'бросить': 'drop',
-      'убить': 'kill',
-      'сказать': 'say',
-      'использовать': 'use',
-      'экипировать': 'equip',
-      'снять': 'unequip',
-      'купить': 'buy',
-      'продать': 'sell',
-      'список': 'list',
-      'характеристики': 'stats',
-      'исцелить': 'heal',
-      'сохранить': 'save',
-      'загрузить': 'load',
-      'помощь': 'help',
-      'справка': 'help'
-    };
-
-    if (shortcuts[command]) {
-      command = shortcuts[command];
+    // Проверяем алиасы
+    const alias = this.aliases.get(command);
+    if (alias) {
+      // Если алиас содержит пробел (например, "go north"), разбираем его
+      if (alias.includes(' ')) {
+        const aliasParts = alias.split(' ');
+        command = aliasParts[0];
+        args.unshift(...aliasParts.slice(1));
+      } else {
+        command = alias;
+      }
     }
 
     return {
