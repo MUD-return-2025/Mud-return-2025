@@ -28,29 +28,39 @@
 src/
 ├── components/
 │   ├── game/
-│   │   ├── GameWorld.vue      # Основной игровой интерфейс
-│   │   ├── GameOutput.vue     # Вывод игровых сообщений
-│   │   ├── GameInput.vue      # Ввод команд
-│   │   ├── PlayerStats.vue    # Статистика игрока
-│   │   ├── Inventory.vue      # Инвентарь
-│   │   └── MiniMap.vue        # Мини-карта
-│   └── ui/
-│       ├── Terminal.vue       # Терминальный интерфейс
-│       └── Button.vue         # Кнопки интерфейса
-├── data/
-│   ├── rooms.json            # Описания локаций
-│   ├── items.json            # Предметы
-│   ├── npcs.json             # НПС и монстры
-│   └── commands.json         # Доступные команды
+│   │   └── GameTerminal.vue   # Основной терминальный интерфейс игры
+│   └── icons/                 # Vue иконки (стандартные)
 ├── game/
-│   ├── GameEngine.js         # Основная игровая логика
-│   ├── Player.js             # Класс игрока
-│   ├── Room.js               # Класс локации
-│   ├── Item.js               # Класс предмета
-│   ├── NPC.js                # Класс НПС
-│   └── CommandParser.js      # Парсер команд
-└── assets/
-    └── game-styles.css       # Стили игры
+│   ├── classes/
+│   │   ├── CommandParser.js   # Парсер игровых команд
+│   │   ├── NPC.js            # Класс НПС и монстров
+│   │   ├── Player.js         # Класс игрока
+│   │   └── Room.js           # Класс локации
+│   ├── data/
+│   │   ├── items.js          # Предметы (оружие, броня, зелья)
+│   │   ├── npcs.js           # НПС и монстры
+│   │   └── rooms.js          # Описания локаций Мидгарда
+│   └── GameEngine.js         # Основная игровая логика
+├── assets/
+│   ├── base.css              # Базовые CSS стили
+│   └── main.css              # Основные стили игры
+├── App.vue                   # Главный компонент приложения
+└── main.js                   # Точка входа приложения
+
+game-docs/                    # Документация игры
+├── README.md                 # Общее описание проекта
+├── architecture.md           # Архитектура и дизайн
+├── player-guide.md          # Руководство игрока
+└── specification.md         # Техническая спецификация
+
+public/
+└── favicon.ico              # Иконка сайта
+
+Корневые файлы:
+├── index.html               # HTML шаблон
+├── package.json             # Зависимости Node.js
+├── vite.config.js          # Конфигурация Vite
+└── .replit                  # Конфигурация Replit
 ```
 
 ## Запуск
