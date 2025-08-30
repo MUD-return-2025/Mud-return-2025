@@ -1,3 +1,95 @@
+<script setup>
+import { ref, computed, inject } from 'vue';
+
+const props = defineProps({
+  player: {
+    type: Object,
+    required: true
+  },
+  gameStarted: {
+    type: Boolean,
+    default: false
+  },
+  gameEngine: {
+    type: Object,
+    required: true
+  }
+});
+
+const emit = defineEmits(['command', 'move']);
+
+const isExpanded = ref(true);
+const activeTab = ref('stats');
+const selectedItem = ref(null);
+
+const tabs = [
+  { id: 'stats', name: 'Статистика' },
+  { id: 'inventory', name: 'Инвентарь' },
+  { id: 'equipment', name: 'Экипировка' },
+  { id: 'map', name: 'Карта' }
+];
+
+const togglePanel = () => {
+  isExpanded.value = !isExpanded.value;
+};
+
+const selectItem = (item) => {
+  selectedItem.value = selectedItem.value?.id === item.id ? null : item;
+};
+
+const getTotalWeight = () => {
+  return props.player.inventory.reduce((total, item) => total + (item.weight || 0), 0);
+};
+
+const getPlayerDamage = () => {
+  let baseDamage = '1d6';
+  const strBonus = Math.floor((props.player.strength - 10) / 2);
+
+  if (props.player.equippedWeapon) {
+    baseDamage = props.player.equippedWeapon.damage || '1d6';
+  }
+
+  if (strBonus > 0) {
+    return `${baseDamage}+${strBonus}`;
+  } else if (strBonus < 0) {
+    return `${baseDamage}${strBonus}`;
+  }
+
+  return baseDamage;
+};
+
+const getPlayerDefense = () => {
+  let defense = 10 + Math.floor((props.player.dexterity - 10) / 2);
+
+  if (props.player.equippedArmor) {
+    defense += props.player.equippedArmor.armor || 0;
+  }
+
+  return defense;
+};
+
+// Методы для работы с картой
+const isRoomAvailable = (roomId) => {
+  if (!props.gameStarted) return false;
+  const availableRooms = props.gameEngine.getAvailableRooms();
+  return availableRooms.includes(roomId);
+};
+
+const isRoomClickable = (roomId) => {
+  return props.gameStarted && roomId !== props.player.currentRoom && isRoomAvailable(roomId);
+};
+
+const moveToRoom = (roomId) => {
+  if (!isRoomClickable(roomId)) return;
+
+  const result = props.gameEngine.moveToRoom(roomId);
+  if (result.success) {
+    emit('move', result.message);
+  } else {
+    emit('command', `Ошибка: ${result.message}`);
+  }
+};
+</script>
 
 <template>
   <div class="stats-panel" v-if="gameStarted">
@@ -7,7 +99,7 @@
         {{ isExpanded ? '−' : '+' }}
       </button>
     </div>
-    
+
     <div v-if="isExpanded" class="panel-content">
       <div class="tabs">
         <button 
@@ -19,7 +111,7 @@
           {{ tab.name }}
         </button>
       </div>
-      
+
       <div class="tab-content">
         <!-- Вкладка "Статистика" -->
         <div v-if="activeTab === 'stats'" class="stats-content">
@@ -33,7 +125,7 @@
               <span class="health-text">{{ player.hitPoints }}/{{ player.maxHitPoints }}</span>
             </div>
           </div>
-          
+
           <div class="stat-group">
             <h4>⭐ Прогресс</h4>
             <div class="stat-line">Уровень: {{ player.level }}</div>
@@ -45,7 +137,7 @@
               <span class="exp-text">{{ player.experience }}/{{ player.experienceToNext }}</span>
             </div>
           </div>
-          
+
           <div class="stat-group">
             <h4>📈 Характеристики</h4>
             <div class="stat-line">💪 Сила: {{ player.strength }}</div>
@@ -56,17 +148,17 @@
             <div class="stat-line">😊 Харизма: {{ player.charisma }}</div>
           </div>
         </div>
-        
+
         <!-- Вкладка "Инвентарь" -->
         <div v-if="activeTab === 'inventory'" class="inventory-content">
           <div class="weight-info">
             Вес: {{ getTotalWeight() }}/{{ player.strength * 10 }}
           </div>
-          
+
           <div v-if="player.inventory.length === 0" class="empty-inventory">
             Инвентарь пуст
           </div>
-          
+
           <div v-else class="inventory-list">
             <div 
               v-for="item in player.inventory" 
@@ -79,7 +171,7 @@
               <span class="item-weight">{{ item.weight || 0 }}кг</span>
             </div>
           </div>
-          
+
           <div v-if="selectedItem" class="item-details">
             <h4>{{ selectedItem.name }}</h4>
             <p>{{ selectedItem.description }}</p>
@@ -114,7 +206,7 @@
             </div>
           </div>
         </div>
-        
+
         <!-- Вкладка "Экипировка" -->
         <div v-if="activeTab === 'equipment'" class="equipment-content">
           <div class="equipment-slot">
@@ -130,7 +222,7 @@
             </div>
             <div v-else class="empty-slot">Не экипировано</div>
           </div>
-          
+
           <div class="equipment-slot">
             <div class="slot-label">🛡️ Броня:</div>
             <div v-if="player.equippedArmor" class="equipped-item">
@@ -144,88 +236,115 @@
             </div>
             <div v-else class="empty-slot">Не экипировано</div>
           </div>
-          
+
           <div class="combat-stats">
             <h4>⚔️ Боевые характеристики</h4>
             <div class="stat-line">Урон: {{ getPlayerDamage() }}</div>
             <div class="stat-line">Защита: {{ getPlayerDefense() }}</div>
           </div>
         </div>
-        
+
         <!-- Вкладка "Мини-карта" -->
-        <div v-if="activeTab === 'map'" class="map-content">
+        <div v-if="activeTab === 'map'" class="tab-content">
           <div class="minimap">
-            <div class="map-grid">
-              <div class="map-row">
-                <div class="map-cell empty"></div>
-                <div 
-                  class="map-cell room" 
-                  :class="{ current: player.currentRoom === 'north_gate' }"
-                  title="Северные ворота"
-                >
-                  С
-                </div>
-                <div class="map-cell empty"></div>
+            <div class="minimap-grid">
+              <!-- Северные ворота -->
+              <div 
+                class="map-room" 
+                :class="{ 
+                  active: player.currentRoom === 'north_gate',
+                  available: isRoomAvailable('north_gate'),
+                  clickable: isRoomClickable('north_gate')
+                }" 
+                style="grid-column: 2; grid-row: 1;"
+                @click="moveToRoom('north_gate')"
+              >
+                <div class="room-name">Северные ворота</div>
               </div>
-              
-              <div class="map-row">
-                <div 
-                  class="map-cell room" 
-                  :class="{ current: player.currentRoom === 'west_quarter' }"
-                  title="Западный квартал"
-                >
-                  З
-                </div>
-                <div 
-                  class="map-cell room center" 
-                  :class="{ current: player.currentRoom === 'center' }"
-                  title="Центральная площадь"
-                >
-                  Ц
-                </div>
-                <div 
-                  class="map-cell room" 
-                  :class="{ current: player.currentRoom === 'east_quarter' }"
-                  title="Восточный квартал"
-                >
-                  В
-                </div>
+
+              <!-- Центральная площадь -->
+              <div 
+                class="map-room" 
+                :class="{ 
+                  active: player.currentRoom === 'center',
+                  available: isRoomAvailable('center'),
+                  clickable: isRoomClickable('center')
+                }" 
+                style="grid-column: 2; grid-row: 2;"
+                @click="moveToRoom('center')"
+              >
+                <div class="room-name">Центр</div>
               </div>
-              
-              <div class="map-row">
-                <div class="map-cell empty"></div>
-                <div 
-                  class="map-cell room" 
-                  :class="{ current: player.currentRoom === 'south_gate' }"
-                  title="Южные ворота"
-                >
-                  Ю
-                </div>
-                <div class="map-cell empty"></div>
+
+              <!-- Восточный квартал -->
+              <div 
+                class="map-room" 
+                :class="{ 
+                  active: player.currentRoom === 'east_quarter',
+                  available: isRoomAvailable('east_quarter'),
+                  clickable: isRoomClickable('east_quarter')
+                }" 
+                style="grid-column: 3; grid-row: 2;"
+                @click="moveToRoom('east_quarter')"
+              >
+                <div class="room-name">Восточный квартал</div>
               </div>
-              
-              <div class="map-row">
-                <div class="map-cell empty"></div>
-                <div 
-                  class="map-cell room" 
-                  :class="{ current: player.currentRoom === 'temple' }"
-                  title="Храм"
-                >
-                  Х
-                </div>
-                <div class="map-cell empty"></div>
+
+              <!-- Западный квартал -->
+              <div 
+                class="map-room" 
+                :class="{ 
+                  active: player.currentRoom === 'west_quarter',
+                  available: isRoomAvailable('west_quarter'),
+                  clickable: isRoomClickable('west_quarter')
+                }" 
+                style="grid-column: 1; grid-row: 2;"
+                @click="moveToRoom('west_quarter')"
+              >
+                <div class="room-name">Западный квартал</div>
+              </div>
+
+              <!-- Южные ворота -->
+              <div 
+                class="map-room" 
+                :class="{ 
+                  active: player.currentRoom === 'south_gate',
+                  available: isRoomAvailable('south_gate'),
+                  clickable: isRoomClickable('south_gate')
+                }" 
+                style="grid-column: 2; grid-row: 3;"
+                @click="moveToRoom('south_gate')"
+              >
+                <div class="room-name">Южные ворота</div>
+              </div>
+
+              <!-- Храм -->
+              <div 
+                class="map-room" 
+                :class="{ 
+                  active: player.currentRoom === 'temple',
+                  available: isRoomAvailable('temple'),
+                  clickable: isRoomClickable('temple')
+                }" 
+                style="grid-column: 2; grid-row: 4;"
+                @click="moveToRoom('temple')"
+              >
+                <div class="room-name">Храм</div>
               </div>
             </div>
-          </div>
-          
-          <div class="map-legend">
-            <div class="legend-item">
-              <span class="legend-marker current">●</span>
-              <span>Ваше местоположение</span>
-            </div>
-            <div class="legend-item">
-              <span class="legend-marker room">○</span>
-              <span>Доступная локация</span>
+            <div class="map-legend">
+              <div class="legend-item">
+                <span class="legend-color current"></span>
+                <span>Текущая локация</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-color available"></span>
+                <span>Доступна для перехода</span>
+              </div>
+              <div class="legend-item">
+                <span class="legend-color unavailable"></span>
+                <span>Недоступна</span>
+              </div>
             </div>
           </div>
         </div>
@@ -233,67 +352,6 @@
     </div>
   </div>
 </template>
-
-<script setup>
-import { ref, computed, defineProps, defineEmits } from 'vue';
-
-const props = defineProps({
-  player: Object,
-  gameStarted: Boolean
-});
-
-const emit = defineEmits(['command']);
-
-const isExpanded = ref(true);
-const activeTab = ref('stats');
-const selectedItem = ref(null);
-
-const tabs = [
-  { id: 'stats', name: 'Статистика' },
-  { id: 'inventory', name: 'Инвентарь' },
-  { id: 'equipment', name: 'Экипировка' },
-  { id: 'map', name: 'Карта' }
-];
-
-const togglePanel = () => {
-  isExpanded.value = !isExpanded.value;
-};
-
-const selectItem = (item) => {
-  selectedItem.value = selectedItem.value?.id === item.id ? null : item;
-};
-
-const getTotalWeight = () => {
-  return props.player.inventory.reduce((total, item) => total + (item.weight || 0), 0);
-};
-
-const getPlayerDamage = () => {
-  let baseDamage = '1d6';
-  const strBonus = Math.floor((props.player.strength - 10) / 2);
-  
-  if (props.player.equippedWeapon) {
-    baseDamage = props.player.equippedWeapon.damage || '1d6';
-  }
-  
-  if (strBonus > 0) {
-    return `${baseDamage}+${strBonus}`;
-  } else if (strBonus < 0) {
-    return `${baseDamage}${strBonus}`;
-  }
-  
-  return baseDamage;
-};
-
-const getPlayerDefense = () => {
-  let defense = 10 + Math.floor((props.player.dexterity - 10) / 2);
-  
-  if (props.player.equippedArmor) {
-    defense += props.player.equippedArmor.armor || 0;
-  }
-  
-  return defense;
-};
-</script>
 
 <style scoped>
 .stats-panel {
@@ -591,79 +649,82 @@ const getPlayerDefense = () => {
   margin-bottom: 15px;
 }
 
-.map-grid {
-  display: inline-block;
+.minimap-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  grid-template-rows: repeat(4, 1fr);
+  gap: 2px;
 }
 
-.map-row {
-  display: flex;
-}
-
-.map-cell {
-  width: 30px;
-  height: 30px;
-  margin: 1px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
+.map-room {
+  background-color: #333;
+  border: 1px solid #555;
+  padding: 8px;
+  text-align: center;
   font-size: 10px;
+  border-radius: 3px;
+  transition: all 0.2s ease;
+}
+
+.map-room.active {
+  background-color: #00ff00;
+  color: #000;
+  border-color: #00ff00;
+  box-shadow: 0 0 10px #00ff00;
+}
+
+.map-room.available {
+  background-color: #004400;
+  border-color: #00aa00;
+}
+
+.map-room.clickable {
+  cursor: pointer;
+  background-color: #006600;
+}
+
+.map-room.clickable:hover {
+  background-color: #008800;
+  border-color: #00ff00;
+  transform: scale(1.05);
+}
+
+.room-name {
   font-weight: bold;
 }
 
-.map-cell.empty {
-  background: transparent;
-}
-
-.map-cell.room {
-  background-color: #003300;
-  border: 1px solid #00ff00;
-  color: #00ff00;
-  cursor: pointer;
-}
-
-.map-cell.room.current {
-  background-color: #ffff00;
-  color: #000;
-  animation: pulse 2s infinite;
-}
-
-.map-cell.room.center {
-  border-color: #ffff00;
-}
-
-@keyframes pulse {
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
-}
-
-.map-cell:hover.room:not(.current) {
-  background-color: #004400;
-}
-
 .map-legend {
-  border-top: 1px solid #333;
-  padding-top: 10px;
+  margin-top: 15px;
+  padding: 10px;
+  background-color: #1a1a1a;
+  border-radius: 5px;
+  font-size: 11px;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  margin: 3px 0;
-  font-size: 10px;
+  margin-bottom: 5px;
 }
 
-.legend-marker {
+.legend-color {
   width: 12px;
-  text-align: center;
-  margin-right: 5px;
+  height: 12px;
+  border-radius: 2px;
+  margin-right: 8px;
+  border: 1px solid #555;
 }
 
-.legend-marker.current {
-  color: #ffff00;
+.legend-color.current {
+  background-color: #00ff00;
 }
 
-.legend-marker.room {
-  color: #00ff00;
+.legend-color.available {
+  background-color: #006600;
+}
+
+.legend-color.unavailable {
+  background-color: #333;
 }
 
 /* Прокрутка */

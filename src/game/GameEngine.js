@@ -812,4 +812,43 @@ ${this.getCurrentRoom().getFullDescription(this)}
   getRecentMessages(count = 10) {
     return this.messageHistory.slice(-count);
   }
+
+  /**
+   * Получает список доступных для перехода комнат из текущей локации
+   * @returns {Array<string>} массив ID комнат
+   */
+  getAvailableRooms() {
+    const currentRoom = this.getCurrentRoom();
+    return Array.from(currentRoom.exits.values());
+  }
+
+  /**
+   * Переходит в указанную комнату, если это возможно
+   * @param {string} targetRoomId - ID целевой комнаты
+   * @returns {Object} результат перехода
+   */
+  moveToRoom(targetRoomId) {
+    if (this.player.state === 'fighting') {
+      return { success: false, message: 'Вы не можете уйти во время боя!' };
+    }
+
+    const currentRoom = this.getCurrentRoom();
+    const availableRooms = this.getAvailableRooms();
+    
+    if (!availableRooms.includes(targetRoomId)) {
+      return { success: false, message: 'Эта комната недоступна отсюда.' };
+    }
+
+    // Находим направление для перехода
+    const direction = Array.from(currentRoom.exits.entries())
+      .find(([dir, roomId]) => roomId === targetRoomId)?.[0];
+
+    this.player.currentRoom = targetRoomId;
+    const newRoom = this.getCurrentRoom();
+    
+    return { 
+      success: true, 
+      message: `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}` 
+    };
+  }
 }

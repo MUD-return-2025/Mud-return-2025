@@ -25,7 +25,9 @@
     <PlayerStatsPanel 
       :player="player" 
       :game-started="gameStarted"
+      :game-engine="gameEngine"
       @command="executeCommand"
+      @move="handleMove"
     />
   </div>
 </template>
@@ -69,6 +71,18 @@ const executeCommand = (command) => {
   if (gameMessages.value.length % 10 === 0) {
     gameEngine.saveGame();
   }
+};
+
+const handleMove = (message) => {
+  if (!gameStarted.value) return;
+  
+  gameMessages.value.push(message);
+  
+  // Обновляем данные игрока
+  Object.assign(player, gameEngine.player);
+  
+  // Автосохранение
+  gameEngine.saveGame();
 };
 
 const processCommand = () => {
