@@ -102,37 +102,27 @@ export class Room {
    * @returns {string} описание локации
    */
   getFullDescription(game) {
-    let desc = `${this.name}\n${this.description}\n`;
+    // Helper to wrap text in a span with a class
+    const colorize = (text, className) => `<span class="${className}">${text}</span>`;
+
+    let desc = `${colorize(this.name, 'room-name')}\n${this.description}\n`;
     
     // Добавляем информацию о выходах
     if (this.exits.size > 0) {
-      desc += `\nВыходы: ${this.getExits().join(', ')}\n`;
+      const exitNames = this.getExits().map(exit => colorize(exit, 'exit-name'));
+      desc += `\nВыходы: ${exitNames.join(', ')}\n`;
     }
     
     // Добавляем информацию о предметах
     if (this.items.length > 0) {
       desc += '\nВы видите:\n';
-      this.items.forEach(itemId => {
-        const item = game.getItem(itemId);
-        if (item) {
-          desc += `  ${item.name}\n`;
-        }
-      });
+      this.items.forEach(itemId => { const item = game.getItem(itemId); if (item) desc += `  ${colorize(item.name, 'item-name')}\n`; });
     }
     
     // Добавляем информацию о НПС
     if (this.npcs.length > 0) {
       desc += '\nЗдесь находятся:\n';
-      this.npcs.forEach(npcId => {
-        const npc = game.getNpc(npcId);
-        if (npc) {
-          desc += `  ${npc.name}`;
-          if (npc.hitPoints <= 0) {
-            desc += ' (мертв)';
-          }
-          desc += '\n';
-        }
-      });
+      this.npcs.forEach(npcId => { const npc = game.getNpc(npcId); if (npc) desc += `  ${colorize(npc.name, `npc-name npc-${npc.type}`)}${npc.hitPoints <= 0 ? colorize(' (мертв)', 'npc-dead') : ''}\n`; });
     }
     
     return desc;

@@ -9,8 +9,7 @@
         <p>Введите "new" для начала новой игры или "load" для загрузки сохранения.</p>
       </div>
 
-      <div v-for="(message, index) in gameMessages" :key="index" class="message">
-        {{ message }}
+      <div v-for="(message, index) in gameMessages" :key="index" class="message" v-html="message">
       </div>
     </div>
 
@@ -205,6 +204,37 @@ onMounted(() => {
 .message {
   margin: 2px 0;
   white-space: pre-wrap;
+}
+
+.message :deep(.room-name) {
+  color: #00ffff; /* Cyan */
+  font-weight: bold;
+}
+
+.message :deep(.exit-name) {
+  color: #ffff00; /* Yellow */
+}
+
+.message :deep(.item-name) {
+  color: #ff00ff; /* Magenta */
+}
+
+.message :deep(.npc-name.npc-friendly) {
+  color: #55ff55; /* Bright Green */
+}
+
+.message :deep(.npc-name.npc-hostile) {
+  color: #ff4444; /* Red */
+  font-weight: bold;
+}
+
+.message :deep(.npc-name.npc-neutral) {
+  color: #aaaaaa; /* Gray */
+}
+
+.message :deep(.npc-dead) {
+  color: #777777;
+  font-style: italic;
 }
 
 .terminal-input {

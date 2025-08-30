@@ -12,6 +12,9 @@ import { npcs } from './data/npcs.js';
  * Управляет состоянием игры, обработкой команд и игровой логикой
  */
 export class GameEngine {
+  // Helper to wrap text in a span with a class for colorization
+  colorize = (text, className) => `<span class="${className}">${text}</span>`;
+
   constructor() {
     this.player = new Player();
     this.rooms = new Map();
@@ -178,29 +181,29 @@ export class GameEngine {
     // Ищем среди предметов в комнате
     const roomItem = currentRoom.items.find(itemId => {
       const item = this.getItem(itemId);
-      return item && item.name.toLowerCase().includes(target);
+      return item && (item.name.toLowerCase().includes(target) || item.id.toLowerCase().includes(target));
     });
     
     if (roomItem) {
       const item = this.getItem(roomItem);
-      return item.description + (item.readText ? `\n\nНа ${item.name} написано: "${item.readText}"` : '');
+      return item.description + (item.readText ? `\n\nНа ${this.colorize(item.name, 'item-name')} написано: "${item.readText}"` : '');
     }
     
     // Ищем среди предметов в инвентаре
     const inventoryItem = this.player.findItem(target);
-    if (inventoryItem) {
+    if (inventoryItem && inventoryItem.name.toLowerCase().includes(target)) {
       return inventoryItem.description;
     }
     
     // Ищем среди НПС
     const npcInRoom = currentRoom.npcs.find(npcId => {
       const npc = this.getNpc(npcId);
-      return npc && npc.name.toLowerCase().includes(target);
+      return npc && (npc.name.toLowerCase().includes(target) || npc.id.toLowerCase().includes(target));
     });
     
     if (npcInRoom) {
       const npc = this.getNpc(npcInRoom);
-      return npc.description + (npc.hitPoints <= 0 ? ' (мертв)' : '');
+      return npc.description + (npc.hitPoints <= 0 ? this.colorize(' (мертв)', 'npc-dead') : '');
     }
     
     return `Вы не видите "${cmd.target}" здесь.`;
@@ -267,7 +270,7 @@ export class GameEngine {
     currentRoom.removeItem(itemId);
     this.player.addItem(item);
     
-    return `Вы взяли ${item.name}.`;
+    return `Вы взяли ${this.colorize(item.name, 'item-name')}.`;
   }
 
   /**
@@ -287,7 +290,7 @@ export class GameEngine {
     this.player.removeItem(item.id);
     currentRoom.addItem(item.id);
     
-    return `Вы бросили ${item.name}.`;
+    return `Вы бросили ${this.colorize(item.name, 'item-name')}.`;
   }
 
   /**
@@ -302,7 +305,7 @@ export class GameEngine {
     let totalWeight = 0;
     
     this.player.inventory.forEach(item => {
-      result += `  ${item.name}`;
+      result += `  ${this.colorize(item.name, 'item-name')}`;
       if (item.weight) {
         result += ` (вес: ${item.weight})`;
         totalWeight += item.weight;
@@ -338,7 +341,7 @@ export class GameEngine {
     const npc = this.getNpc(npcId);
     
     if (npc.type === 'friendly') {
-      return `${npc.name} дружелюбен к вам. Вы не можете атаковать.`;
+      return `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} дружелюбен к вам. Вы не можете атаковать.`;
     }
     
     // Начинаем или продолжаем бой
@@ -360,11 +363,11 @@ export class GameEngine {
     const playerDamage = this.calculatePlayerDamage();
     const npcAlive = npc.takeDamage(playerDamage);
     
-    result += `Вы наносите ${playerDamage} урона ${npc.name}.\n`;
+    result += `Вы наносите ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.\n`;
     
     if (!npcAlive) {
       // НПС умер
-      result += `${npc.name} повержен!\n`;
+      result += `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} повержен!\n`;
       
       if (npc.experience > 0) {
         this.player.addExperience(npc.experience);
@@ -376,7 +379,7 @@ export class GameEngine {
       if (drops.length > 0) {
         const currentRoom = this.getCurrentRoom();
         drops.forEach(itemId => currentRoom.addItem(itemId));
-        result += `${npc.name} что-то оставил.\n`;
+        result += `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} что-то оставил.\n`;
       }
       
       // Убираем НПС из локации
@@ -389,7 +392,7 @@ export class GameEngine {
       const npcDamage = npc.rollDamage();
       this.player.takeDamage(npcDamage);
       
-      result += `${npc.name} наносит вам ${npcDamage} урона.\n`;
+      result += `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} наносит вам ${npcDamage} урона.\n`;
       result += `У вас осталось ${this.player.hitPoints}/${this.player.maxHitPoints} HP.`;
       
       if (this.player.hitPoints <= 0) {
@@ -435,7 +438,7 @@ export class GameEngine {
     const responses = [];
     currentRoom.npcs.forEach(npcId => {
       const npc = this.getNpc(npcId);
-      if (npc && npc.isAlive()) {
+      if (npc?.isAlive()) {
         responses.push(npc.speak());
       }
     });
@@ -466,7 +469,7 @@ export class GameEngine {
     if (item.type === 'potion' && item.healAmount) {
       const healed = this.player.heal(item.healAmount);
       this.player.removeItem(item.id);
-      return `Вы выпили ${item.name}. Восстановлено ${healed} HP.`;
+      return `Вы выпили ${this.colorize(item.name, 'item-name')}. Восстановлено ${healed} HP.`;
     }
     
     return `Вы не знаете, как использовать ${item.name}.`;
@@ -548,7 +551,7 @@ export class GameEngine {
     }
     
     this.player.hitPoints = this.player.maxHitPoints;
-    return 'Жрец исцелил ваши раны. Вы полностью здоровы.';
+    return `${this.colorize(this.getNpc(priest).name, 'npc-name npc-friendly')} исцелил ваши раны. Вы полностью здоровы.`;
   }
 
   /**
@@ -609,14 +612,14 @@ export class GameEngine {
     const shopItems = npc.getShopItems();
     
     if (shopItems.length === 0) {
-      return `${npc.name} говорит: "Извините, товар закончился."`;
+      return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Извините, товар закончился."`;
     }
 
-    let result = `${npc.name} предлагает:\n`;
+    let result = `${this.colorize(npc.name, 'npc-name npc-friendly')} предлагает:\n`;
     shopItems.forEach((itemId, index) => {
       const item = this.getItem(itemId);
       if (item) {
-        result += `${index + 1}. ${item.name} - ${item.value || 'N/A'} золота\n`;
+        result += `${index + 1}. ${this.colorize(item.name, 'item-name')} - ${item.value || 'N/A'} золота\n`;
       }
     });
 
@@ -653,19 +656,19 @@ export class GameEngine {
     });
 
     if (!itemId) {
-      return `${npc.name} говорит: "У меня нет такого товара."`;
+      return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "У меня нет такого товара."`;
     }
 
     const item = this.getItem(itemId);
     
     // Проверяем, может ли игрок нести предмет
     if (!this.player.canCarry(item)) {
-      return `${npc.name} говорит: "Этот товар слишком тяжел для вас."`;
+      return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Этот товар слишком тяжел для вас."`;
     }
 
     // В упрощенной версии покупка бесплатная
     this.player.addItem(item);
-    return `${npc.name} говорит: "Вот ваш ${item.name}. Пользуйтесь на здоровье!"`;
+    return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Вот ваш ${this.colorize(item.name, 'item-name')}. Пользуйтесь на здоровье!"`;
   }
 
   /**
@@ -695,7 +698,7 @@ export class GameEngine {
     this.player.removeItem(item.id);
     
     const sellPrice = Math.floor((item.value || 10) / 2);
-    return `${npc.name} говорит: "Спасибо за ${item.name}! Вот вам ${sellPrice} золота." (В этой версии золото пока не реализовано)`;
+    return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Спасибо за ${this.colorize(item.name, 'item-name')}! Вот вам ${sellPrice} золота." (В этой версии золото пока не реализовано)`;
   }
 
   // Вспомогательные методы
