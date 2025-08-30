@@ -15,13 +15,15 @@
 #### 1. GameEngine (Игровой движок)
 ```javascript
 class GameEngine {
-  - currentPlayer: Player
-  - currentRoom: Room
-  - gameState: 'playing' | 'paused' | 'menu'
+  - player: Player
+  - rooms: Map<string, Room>
+  - npcs: Map<string, NPC>
+  - commandParser: CommandParser
+  - combatTarget: NPC | null
   - messageHistory: Array<string>
+  - gameState: string
   
-  + processCommand(command: string): void
-  + updateGame(): void
+  + processCommand(input: string): string
   + saveGame(): void
   + loadGame(): void
 }
@@ -35,13 +37,11 @@ class Player {
   - experience: number
   - hitPoints: number
   - maxHitPoints: number
-  - inventory: Array<Item>
+  - inventory: Array<Object> // Массив объектов предметов
+  - state: 'idle' | 'fighting' | 'dead'
+  - equippedWeapon: Item | null
+  - equippedArmor: Item | null
   - currentRoom: string
-  
-  + move(direction: string): boolean
-  + attack(target: NPC): void
-  + useItem(item: Item): void
-  + levelUp(): void
 }
 ```
 
@@ -75,36 +75,13 @@ class CommandParser {
 ## Поток данных
 
 1. **Пользователь вводит команду** → GameInput.vue
-2. **Команда передается в GameEngine** → processCommand()
-3. **Парсер обрабатывает команду** → CommandParser.parseCommand()
-4. **Выполняется игровая логика** → различные методы классов
-5. **Обновляется состояние игры** → реактивные данные Vue
-6. **Интерфейс автоматически перерисовывается** → Vue reactivity
+2. **GameTerminal.vue вызывает `gameEngine.processCommand()`**
+3. **GameEngine использует CommandParser** для разбора и выполнения команды
+4. **Команда изменяет состояние** (объекты Player, Room, NPC) внутри GameEngine
+5. **GameTerminal.vue обновляет реактивный объект `player`**, что вызывает перерисовку UI (включая PlayerStatsPanel)
 
 ## Управление состоянием
-
-### Глобальное состояние (composables)
-```javascript
-// useGameState.js
-export function useGameState() {
-  const player = ref(new Player())
-  const currentRoom = ref(null)
-  const gameMessages = ref([])
-  const gameState = ref('menu')
-  
-  return {
-    player,
-    currentRoom,
-    gameMessages,
-    gameState,
-    // методы для изменения состояния
-  }
-}
-```
-
-### Локальное состояние компонентов
-- Состояние UI (открытые панели, фокус ввода)
-- Временные данные (анимации, переходы)
+Основной компонент `GameTerminal.vue` владеет единственным экземпляром `GameEngine`. Состояние игрока (`player`) является реактивным объектом (`reactive`) и передается в дочерний компонент `PlayerStatsPanel.vue` через props. `PlayerStatsPanel` отправляет команды обратно в `GameTerminal` через emit-события (`@command`, `@move`), которые затем обрабатываются `GameEngine`. Это обеспечивает однонаправленный поток данных.
 
 ## Система команд
 
@@ -114,14 +91,18 @@ export function useGameState() {
 - **get** <item> - взять предмет
 - **drop** <item> - бросить предмет
 - **inventory** - показать инвентарь
-- **score** - показать статистику
+- **stats** - показать статистику
 - **help** - помощь
 
 ### Боевые команды
 - **kill** <target> - атаковать цель
-- **flee** - убежать из боя
 
-### Продвинутые команды
+### Команды взаимодействия
 - **use** <item> - использовать предмет
-- **examine** <target> - детальный осмотр
 - **say** <message> - сказать что-то
+- **equip** <item> - экипировать предмет
+- **unequip** <weapon|armor> - снять предмет
+- **list** - посмотреть товары
+- **buy** <item> - купить предмет
+- **sell** <item> - продать предмет
+- **heal** - исцелиться

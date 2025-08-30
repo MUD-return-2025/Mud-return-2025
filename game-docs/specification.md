@@ -46,7 +46,10 @@
   constitution: 10,
   intelligence: 10,
   wisdom: 10,
-  charisma: 10
+  charisma: 10,
+  state: 'idle' | 'fighting' | 'dead',
+  equippedWeapon: null | Item,
+  equippedArmor: null | Item
 }
 ```
 
@@ -95,7 +98,10 @@
   maxHitPoints: 25,
   damage: "1d6+2",
   experience: 0,
-  drops: []
+  drops: [],
+  dialogue: ["Стоять! Дальше прохода нет."],
+  canHeal: false,
+  shop: []
 }
 ```
 
@@ -128,7 +134,17 @@
 
 ### Формула урона
 ```javascript
-damage = roll(weaponDamage) + strengthModifier
+player_damage = roll(player.getWeaponDamageBonus()) + strength_modifier
+```
+
+### Формула защиты
+```javascript
+player_defense = 10 + dexterity_modifier + armor_bonus
+```
+
+### Формула защиты
+```javascript
+player_defense = 10 + dexterity_modifier + armor_bonus
 ```
 
 ## 7. Пользовательский интерфейс
@@ -149,10 +165,10 @@ damage = roll(weaponDamage) + strengthModifier
 ### LocalStorage
 ```javascript
 {
-  player: {}, // состояние игрока
-  currentRoom: "center", // текущая локация
-  gameTime: Date.now(), // время сохранения
-  rooms: {}, // состояние локаций (если изменились)
+  player: {}, // полный объект игрока, включая инвентарь, характеристики и экипировку
+  rooms: {}, // состояние локаций (предметы на земле)
+  npcs: {}, // состояние НПС (HP, положение)
+  timestamp: Date.now()
 }
 ```
 
