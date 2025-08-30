@@ -62,4 +62,3 @@ import GameTerminal from './components/game/GameTerminal.vue';
   color: #888;
 }
 </style>
-</template>
