@@ -26,6 +26,7 @@ export class Player {
     this.target = null; // текущая цель в бою
     this.equippedWeapon = null; // экипированное оружие
     this.equippedArmor = null; // экипированная броня
+    this.ui_version = 0; // счетчик для триггера обновления UI
   }
 
   /**

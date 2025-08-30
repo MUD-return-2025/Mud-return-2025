@@ -149,6 +149,8 @@ const npcsInRoom = computed(() => {
   // Триггер для пересчета при изменении состояния игрока (например, после боя).
   // eslint-disable-next-line no-unused-expressions
   props.player.experience;
+  // Триггер для общих обновлений UI (например, респавн).
+  props.player.ui_version;
 
   if (!currentRoom.value) return [];
   return currentRoom.value.npcs
@@ -161,6 +163,8 @@ const itemsInRoom = computed(() => {
   // Триггер для пересчета при изменении инвентаря (взять/бросить).
   // eslint-disable-next-line no-unused-expressions
   props.player.inventory.length;
+  // Триггер для общих обновлений UI.
+  props.player.ui_version;
 
   if (!currentRoom.value) return [];
   return currentRoom.value.items

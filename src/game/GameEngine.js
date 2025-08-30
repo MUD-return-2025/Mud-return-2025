@@ -23,9 +23,13 @@ export class GameEngine {
     this.messageHistory = [];
     this.gameState = 'menu'; // menu, playing, paused
     this.combatTarget = null; // текущая цель в бою
+    this.respawnQueue = []; // очередь для возрождения НПС
     
     this.initializeWorld();
     this.registerCommands();
+
+    // Основной игровой цикл для обработки асинхронных событий, таких как возрождение
+    // this.gameLoopInterval = setInterval(() => this.update(), 1000); // Управление циклом передано в GameTerminal.vue
   }
 
   /**
@@ -167,6 +171,63 @@ export class GameEngine {
     }
     
     return result;
+  }
+
+  /**
+   * Основной метод обновления, вызываемый в игровом цикле.
+   */
+  update() {
+    const messages = this.checkRespawns();
+    return messages;
+  }
+
+  /**
+   * Проверяет очередь возрождения и возрождает НПС, если пришло время.
+   */
+  checkRespawns() {
+    const messages = [];
+    const now = Date.now();
+
+    this.respawnQueue = this.respawnQueue.filter(entry => {
+      if (now >= entry.respawnTime) {
+        const npc = this.getNpc(entry.npcId);
+        const room = this.rooms.get(entry.roomId);
+        // Возрождаем, только если НПС еще не в комнате
+        if (npc && room && !room.hasNpc(entry.npcId)) {
+          npc.respawn();
+          room.addNpc(entry.npcId);
+          // NEW: Check if player is in the room and add a message
+          if (this.player.currentRoom === entry.roomId) {
+              messages.push(this.colorize(`${npc.name} появляется из тени!`, 'combat-npc-death'));
+              this.player.ui_version++; // Триггер для обновления UI
+          }
+        }
+        return false; // Удаляем из очереди
+      }
+      return true; // Оставляем в очереди
+    });
+
+    return messages;
+  }
+
+  /**
+   * Планирует возрождение НПС.
+   * @param {string} npcId - ID НПС для возрождения.
+   * @param {string} roomId - ID комнаты, где НПС должен возродиться.
+   */
+  scheduleNpcRespawn(npcId, roomId) {
+    const npc = this.getNpc(npcId);
+    // Возрождаем только враждебных НПС (например, крыс)
+    if (!npc || npc.type !== 'hostile') {
+      return;
+    }
+
+    const RESPAWN_TIME = 30000; // 30 секунд
+    this.respawnQueue.push({
+      npcId,
+      roomId,
+      respawnTime: Date.now() + RESPAWN_TIME
+    });
   }
 
   /**
@@ -387,8 +448,12 @@ export class GameEngine {
         result += `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} что-то оставил.\n`;
       }
       
-      // Убираем НПС из локации
-      this.getCurrentRoom().removeNpc(this.combatTarget);
+      // Убираем НПС из локации и планируем возрождение
+      const deadNpcId = this.combatTarget;
+      const deadNpcRoomId = this.player.currentRoom;
+      this.getCurrentRoom().removeNpc(deadNpcId);
+      this.scheduleNpcRespawn(deadNpcId, deadNpcRoomId);
+
       this.player.state = 'idle';
       this.combatTarget = null;
       
@@ -780,7 +845,8 @@ export class GameEngine {
         currentRoom: this.player.currentRoom,
         state: this.player.state,
         equippedWeapon: this.player.equippedWeapon,
-        equippedArmor: this.player.equippedArmor
+        equippedArmor: this.player.equippedArmor,
+        ui_version: this.player.ui_version || 0
       },
       rooms: Object.fromEntries(this.rooms),
       npcs: Object.fromEntries(this.npcs),

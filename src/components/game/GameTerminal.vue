@@ -168,12 +168,26 @@ onMounted(() => {
   inputElement.value?.focus();
   historyIndex.value = commandHistory.value.length;
 
-  // Автосохранение каждые 30 секунд
+  let tickCount = 0;
+  // Основной игровой цикл, запускается каждую секунду
   setInterval(() => {
     if (gameStarted.value) {
-      gameEngine.saveGame();
+      // 1. Обрабатываем асинхронные события движка (например, респавн)
+      const tickMessages = gameEngine.update();
+      if (tickMessages.length > 0) {
+        gameMessages.value.push(...tickMessages);
+        // Обновляем реактивный объект игрока, чтобы UI (панель статистики) перерисовался
+        Object.assign(player, gameEngine.player);
+      }
+
+      // 2. Автосохранение каждые 30 секунд
+      tickCount++;
+      if (tickCount >= 30) {
+        gameEngine.saveGame();
+        tickCount = 0;
+      }
     }
-  }, 30000);
+  }, 1000);
 });
 </script>
 
