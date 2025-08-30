@@ -34,10 +34,12 @@ export class Player {
    */
   addExperience(exp) {
     this.experience += exp;
+    let levelUpInfo = null;
     
     while (this.experience >= this.experienceToNext) {
-      this.levelUp();
+      levelUpInfo = this.levelUp(); // Capture the last level up info
     }
+    return levelUpInfo; // Return it
   }
 
   /**

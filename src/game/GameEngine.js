@@ -219,9 +219,9 @@ export class GameEngine {
    * Основной метод обновления, вызываемый в игровом цикле.
    */
   update() {
-    // checkRespawns теперь сам вызывает emit('update') при необходимости
     const messages = this.checkRespawns();
-    return messages;
+    const wanderMessages = this.updateWanderingNpcs();
+    return [...messages, ...wanderMessages];
   }
 
   /**
@@ -250,6 +250,54 @@ export class GameEngine {
       return true; // Оставляем в очереди
     });
 
+    return messages;
+  }
+
+  /**
+   * Обновляет положение блуждающих НПС.
+   */
+  updateWanderingNpcs() {
+    const messages = [];
+    const WANDER_CHANCE = 0.05; // 5% шанс в секунду на перемещение
+
+    for (const npc of this.npcs.values()) {
+      // НПС не должен перемещаться, если он в бою
+      if (npc.canWander && npc.isAlive() && this.combatTarget !== npc.id && Math.random() < WANDER_CHANCE) {
+        // Находим комнату, в которой находится НПС
+        let currentNpcRoom = null;
+        let currentNpcRoomId = null;
+        for (const [roomId, room] of this.rooms.entries()) {
+          if (room.hasNpc(npc.id)) {
+            currentNpcRoom = room;
+            currentNpcRoomId = roomId;
+            break;
+          }
+        }
+
+        if (currentNpcRoom) {
+          const exits = currentNpcRoom.getExits();
+          if (exits.length > 0) {
+            const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
+            const targetRoomId = currentNpcRoom.getExit(randomExitDirection);
+            const targetRoom = this.rooms.get(targetRoomId);
+
+            if (targetRoom) {
+              currentNpcRoom.removeNpc(npc.id);
+              targetRoom.addNpc(npc.id);
+
+              // Если игрок в одной из комнат, оповещаем его
+              if (this.player.currentRoom === currentNpcRoomId) {
+                messages.push(this.colorize(`${npc.name} уходит в сторону (${randomExitDirection}).`, 'npc-neutral'));
+                this.emit('update');
+              } else if (this.player.currentRoom === targetRoomId) {
+                messages.push(this.colorize(`${npc.name} приходит откуда-то.`, 'npc-neutral'));
+                this.emit('update');
+              }
+            }
+          }
+        }
+      }
+    }
     return messages;
   }
 
@@ -439,10 +487,10 @@ export class GameEngine {
     if (!cmd.target) {
       return 'Кого вы хотите атаковать?';
     }
-    
+
     const currentRoom = this.getCurrentRoom();
     const target = cmd.target.toLowerCase();
-    
+
     // Ищем НПС в локации
     const npcId = currentRoom.npcs.find(npcId => {
       const npc = this.getNpc(npcId);
@@ -464,19 +512,20 @@ export class GameEngine {
     this.combatTarget = npcId;
     this.emit('update'); // Обновляем UI для отображения состояния боя
     
-    // Первый раунд
-    const initialResult = this.performCombatRound();
-    this.emit('message', initialResult);
+    // Запускаем боевой цикл
+    const initialAttackMessage = `Вы атакуете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}!`;
+    const firstRoundResult = this.performCombatRound();
+    this.emit('message', `${initialAttackMessage}\n${firstRoundResult}`);
 
     // Если бой не закончился, запускаем интервал
     if (this.player.state === 'fighting') {
       this.combatInterval = setInterval(() => {
         const roundResult = this.performCombatRound();
         this.emit('message', roundResult);
-      }, 2000); // 2 секунды
+      }, 2500); // 2.5 секунды
     }
 
-    return `Вы атакуете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}!`;
+    return ''; // Все сообщения теперь обрабатываются через события
   }
 
   /**
@@ -490,15 +539,14 @@ export class GameEngine {
       return 'Цель уже повержена.';
     }
     let result = '';
-    
-    // Атака игрока
+
+    // --- Ход игрока ---
     const playerDamage = this.calculatePlayerDamage();
     const npcAlive = npc.takeDamage(playerDamage);
-    
     result += this.colorize(`Вы наносите ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack');
     
     if (!npcAlive) {
-      // НПС умер
+      // НПС умер от атаки игрока
       result += '\n' + this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} повержен!`, 'combat-npc-death');
       
       if (npc.experience > 0) {
@@ -509,7 +557,6 @@ export class GameEngine {
         }
       }
       
-      // Дропы
       const drops = npc.getDeathDrops();
       if (drops.length > 0) {
         const currentRoom = this.getCurrentRoom();
@@ -517,36 +564,65 @@ export class GameEngine {
         result += `\n${this.colorize(npc.name, `npc-name npc-${npc.type}`)} что-то оставил.`;
       }
       
-      // Убираем НПС из локации и планируем возрождение
       const deadNpcId = this.combatTarget;
       const deadNpcRoomId = this.player.currentRoom;
       this.getCurrentRoom().removeNpc(deadNpcId);
       this.scheduleNpcRespawn(deadNpcId, deadNpcRoomId);
 
       this.stopCombat();
-      
-    } else {
-      // НПС жив и атакует в ответ
-      const npcDamage = npc.rollDamage();
-      this.player.takeDamage(npcDamage);
-      
-      result += '\n' + this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} наносит вам ${npcDamage} урона.`, 'combat-npc-attack');
-      result += '\n' + this.colorize(`У вас осталось ${this.player.hitPoints}/${this.player.maxHitPoints} HP.`, 'combat-player-hp');
-      
-      if (this.player.hitPoints <= 0) {
-        result += '\n' + this.colorize('Вы умерли!', 'combat-player-death');
-        this.stopCombat();
+      return result;
+    }
+
+    // --- Ход НПС ---
+    // 1. Проверка на бегство
+    if (npc.fleesAtPercent > 0 && (npc.hitPoints / npc.maxHitPoints) <= npc.fleesAtPercent) {
+      const currentRoom = this.getCurrentRoom();
+      const exits = currentRoom.getExits();
+      if (exits.length > 0) {
+        const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
+        const targetRoomId = currentRoom.getExit(randomExitDirection);
+        const targetRoom = this.rooms.get(targetRoomId);
+        if (targetRoom) {
+          currentRoom.removeNpc(npc.id);
+          targetRoom.addNpc(npc.id);
+          result += '\n' + this.colorize(`${npc.name} в страхе сбегает!`, 'combat-npc-death');
+          this.stopCombat();
+          return result;
+        }
       }
     }
+
+    // 2. Проверка на спецспособности
+    if (npc.specialAbilities && npc.specialAbilities.length > 0) {
+      for (const ability of npc.specialAbilities) {
+        if (Math.random() < ability.chance) {
+          if (ability.name === 'bark') {
+            result += '\n' + this.colorize(ability.message, 'combat-npc-attack');
+            this.stopCombat(true); // Игрок сбегает
+            return result;
+          }
+        }
+      }
+    }
+
+    // 3. Обычная атака НПС
+    const npcDamage = npc.rollDamage();
+    this.player.takeDamage(npcDamage);
+    result += '\n' + this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} наносит вам ${npcDamage} урона.`, 'combat-npc-attack');
+    result += '\n' + this.colorize(`У вас осталось ${this.player.hitPoints}/${this.player.maxHitPoints} HP.`, 'combat-player-hp');
     
+    if (this.player.hitPoints <= 0) {
+      result += '\n' + this.colorize('Вы умерли!', 'combat-player-death');
+      this.stopCombat();
+    }
     return result;
   }
 
   /**
    * Завершает бой
-   * @param {boolean} fled - игрок сбежал?
+   * @param {boolean} playerFled - игрок сбежал?
    */
-  stopCombat(fled = false) {
+  stopCombat(playerFled = false) {
     if (this.combatInterval) {
       clearInterval(this.combatInterval);
       this.combatInterval = null;
@@ -554,9 +630,7 @@ export class GameEngine {
     if (this.player.state !== 'dead') {
       this.player.state = 'idle';
     }
-    if (fled) {
-      this.combatTarget = null;
-    }
+    this.combatTarget = null;
     this.emit('update');
   }
 
@@ -741,7 +815,7 @@ export class GameEngine {
       return 'Вы не в бою.';
     }
     const npc = this.getNpc(this.combatTarget);
-    this.stopCombat(true); // fled = true
+    this.stopCombat(true); // playerFled = true
     return `Вы успешно сбежали от ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`;
   }
 

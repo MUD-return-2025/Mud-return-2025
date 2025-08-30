@@ -88,5 +88,26 @@ export const npcs = {
       '*шипит*',
       '*скалит зубы*'
     ]
+  },
+
+  stray_dog: {
+    id: 'stray_dog',
+    name: 'бродячая собака',
+    description: 'Худая, но мускулистая собака с диким взглядом. Она рычит, показывая клыки.',
+    type: 'hostile',
+    hitPoints: 16,
+    maxHitPoints: 16,
+    damage: '1d6+1',
+    experience: 25,
+    drops: [],
+    dialogue: [
+      'Гав-гав!',
+      '*рычит*'
+    ],
+    canWander: true, // Может перемещаться по карте
+    fleesAtPercent: 0.25, // Сбегает, когда здоровье <= 25%
+    specialAbilities: [ // Список спецспособностей
+      { name: 'bark', chance: 0.2, message: 'Бродячая собака издает оглушительный лай! Вы в панике отступаете.' }
+    ]
   }
 };

@@ -17,6 +17,9 @@ export class NPC {
     this.dialogue = [...(npcData.dialogue || [])]; // реплики НПС
     this.canHeal = npcData.canHeal || false; // может ли лечить игрока
     this.shop = [...(npcData.shop || [])]; // товары для продажи
+    this.canWander = npcData.canWander || false;
+    this.fleesAtPercent = npcData.fleesAtPercent || 0;
+    this.specialAbilities = [...(npcData.specialAbilities || [])];
     this.currentDialogue = 0; // индекс текущей реплики
   }
 

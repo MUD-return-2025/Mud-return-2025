@@ -80,6 +80,6 @@ export const rooms = {
       'в': 'center'
     },
     items: [],
-    npcs: ['rat']
+    npcs: ['rat', 'stray_dog']
   }
 };
