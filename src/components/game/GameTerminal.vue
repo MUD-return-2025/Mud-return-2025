@@ -106,8 +106,8 @@ const executeCommand = (command) => {
   if (!gameStarted.value) return;
   
   const result = gameEngine.processCommand(command);
-  gameMessages.value.push(`> ${command}`);
-  gameMessages.value.push(...result.split('\n'));
+  if (command) gameMessages.value.push(`> ${command}`);
+  if (result) gameMessages.value.push(...result.split('\n'));
 
   // Автосохранение каждые несколько команд
   if (gameMessages.value.length % 10 === 0) {
@@ -168,6 +168,13 @@ onMounted(() => {
     // Обновляем реактивный объект игрока, чтобы UI (панель статистики) перерисовался
     Object.assign(player, gameEngine.player);
     updateCounter.value++;
+  });
+
+  // NEW: Listen for async messages from the engine (e.g., combat rounds)
+  gameEngine.on('message', (message) => {
+    if (message) {
+      gameMessages.value.push(...message.split('\n'));
+    }
   });
 
   let tickCount = 0;

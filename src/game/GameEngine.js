@@ -23,6 +23,7 @@ export class GameEngine {
     this.messageHistory = [];
     this.gameState = 'menu'; // menu, playing, paused
     this.combatTarget = null; // текущая цель в бою
+    this.combatInterval = null; // интервал для автоматического боя
     this.respawnQueue = []; // очередь для возрождения НПС
     this.listeners = {}; // { eventName: [callback, ...] }
     
@@ -170,6 +171,11 @@ export class GameEngine {
       'продать предмет торговцу', 
       ['продать']
     );
+
+    this.commandParser.registerCommand('flee', this.cmdFlee.bind(this),
+      'сбежать из боя',
+      ['сбежать']
+    );
   }
 
   /**
@@ -183,6 +189,13 @@ export class GameEngine {
     }
 
     const parsed = this.commandParser.parseCommand(input);
+
+    // NEW: Check for commands during combat
+    const allowedCombatCommands = ['flee', 'look', 'inventory', 'stats', 'use'];
+    if (this.player.state === 'fighting' && !allowedCombatCommands.includes(parsed.command)) {
+      return 'Вы не можете сделать это в бою! Попробуйте `flee` (сбежать).';
+    }
+
     const result = this.commandParser.executeCommand(parsed, this);
 
     // После каждой команды оповещаем UI о возможном изменении состояния
@@ -190,7 +203,9 @@ export class GameEngine {
     
     // Добавляем команду и результат в историю
     this.messageHistory.push(`> ${input}`);
-    this.messageHistory.push(result);
+    if (result) { // Не добавляем пустые ответы (например, от асинхронных команд)
+      this.messageHistory.push(result);
+    }
     
     // Ограничиваем историю сообщений
     if (this.messageHistory.length > 100) {
@@ -417,6 +432,10 @@ export class GameEngine {
    * Команда: kill - атака
    */
   cmdKill(cmd) {
+    if (this.player.state === 'fighting') {
+      return 'Вы уже в бою!';
+    }
+
     if (!cmd.target) {
       return 'Кого вы хотите атаковать?';
     }
@@ -440,11 +459,24 @@ export class GameEngine {
       return `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} дружелюбен к вам. Вы не можете атаковать.`;
     }
     
-    // Начинаем или продолжаем бой
+    // Начинаем бой
     this.player.state = 'fighting';
     this.combatTarget = npcId;
+    this.emit('update'); // Обновляем UI для отображения состояния боя
     
-    return this.performCombatRound();
+    // Первый раунд
+    const initialResult = this.performCombatRound();
+    this.emit('message', initialResult);
+
+    // Если бой не закончился, запускаем интервал
+    if (this.player.state === 'fighting') {
+      this.combatInterval = setInterval(() => {
+        const roundResult = this.performCombatRound();
+        this.emit('message', roundResult);
+      }, 2000); // 2 секунды
+    }
+
+    return `Вы атакуете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}!`;
   }
 
   /**
@@ -453,21 +485,28 @@ export class GameEngine {
    */
   performCombatRound() {
     const npc = this.getNpc(this.combatTarget);
+    if (!npc || !npc.isAlive()) {
+      this.stopCombat();
+      return 'Цель уже повержена.';
+    }
     let result = '';
     
     // Атака игрока
     const playerDamage = this.calculatePlayerDamage();
     const npcAlive = npc.takeDamage(playerDamage);
     
-    result += this.colorize(`Вы наносите ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack') + '\n';
+    result += this.colorize(`Вы наносите ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack');
     
     if (!npcAlive) {
       // НПС умер
-      result += this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} повержен!`, 'combat-npc-death') + '\n';
+      result += '\n' + this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} повержен!`, 'combat-npc-death');
       
       if (npc.experience > 0) {
-        this.player.addExperience(npc.experience);
-        result += this.colorize(`Вы получили ${npc.experience} опыта.`, 'combat-exp-gain') + '\n';
+        const levelUpMessage = this.player.addExperience(npc.experience);
+        result += '\n' + this.colorize(`Вы получили ${npc.experience} опыта.`, 'combat-exp-gain');
+        if (levelUpMessage) {
+          result += '\n' + this.colorize(levelUpMessage.message, 'combat-exp-gain');
+        }
       }
       
       // Дропы
@@ -475,7 +514,7 @@ export class GameEngine {
       if (drops.length > 0) {
         const currentRoom = this.getCurrentRoom();
         drops.forEach(itemId => currentRoom.addItem(itemId));
-        result += `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} что-то оставил.\n`;
+        result += `\n${this.colorize(npc.name, `npc-name npc-${npc.type}`)} что-то оставил.`;
       }
       
       // Убираем НПС из локации и планируем возрождение
@@ -484,25 +523,41 @@ export class GameEngine {
       this.getCurrentRoom().removeNpc(deadNpcId);
       this.scheduleNpcRespawn(deadNpcId, deadNpcRoomId);
 
-      this.player.state = 'idle';
-      this.combatTarget = null;
+      this.stopCombat();
       
     } else {
       // НПС жив и атакует в ответ
       const npcDamage = npc.rollDamage();
       this.player.takeDamage(npcDamage);
       
-      result += this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} наносит вам ${npcDamage} урона.`, 'combat-npc-attack') + '\n';
-      result += this.colorize(`У вас осталось ${this.player.hitPoints}/${this.player.maxHitPoints} HP.`, 'combat-player-hp');
+      result += '\n' + this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} наносит вам ${npcDamage} урона.`, 'combat-npc-attack');
+      result += '\n' + this.colorize(`У вас осталось ${this.player.hitPoints}/${this.player.maxHitPoints} HP.`, 'combat-player-hp');
       
       if (this.player.hitPoints <= 0) {
         result += '\n' + this.colorize('Вы умерли!', 'combat-player-death');
-        this.player.state = 'dead';
-        this.combatTarget = null;
+        this.stopCombat();
       }
     }
     
     return result;
+  }
+
+  /**
+   * Завершает бой
+   * @param {boolean} fled - игрок сбежал?
+   */
+  stopCombat(fled = false) {
+    if (this.combatInterval) {
+      clearInterval(this.combatInterval);
+      this.combatInterval = null;
+    }
+    if (this.player.state !== 'dead') {
+      this.player.state = 'idle';
+    }
+    if (fled) {
+      this.combatTarget = null;
+    }
+    this.emit('update');
   }
 
   /**
@@ -677,6 +732,19 @@ export class GameEngine {
     this.player.hitPoints = this.player.maxHitPoints;
     return `${this.colorize(this.getNpc(priest).name, 'npc-name npc-friendly')} исцелил ваши раны. Вы полностью здоровы.`;
   }
+
+  /**
+   * Команда: flee - сбежать из боя
+   */
+  cmdFlee(cmd) {
+    if (this.player.state !== 'fighting') {
+      return 'Вы не в бою.';
+    }
+    const npc = this.getNpc(this.combatTarget);
+    this.stopCombat(true); // fled = true
+    return `Вы успешно сбежали от ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`;
+  }
+
 
   /**
    * Команда: equip - экипировка предмета
