@@ -146,6 +146,10 @@ const currentRoom = computed(() => {
 
 /** @type {import('vue').ComputedRef<import('../../game/classes/NPC').NPC[]>} */
 const npcsInRoom = computed(() => {
+  // Триггер для пересчета при изменении состояния игрока (например, после боя).
+  // eslint-disable-next-line no-unused-expressions
+  props.player.experience;
+
   if (!currentRoom.value) return [];
   return currentRoom.value.npcs
     .map(npcId => props.gameEngine.getNpc(npcId))
@@ -154,6 +158,10 @@ const npcsInRoom = computed(() => {
 
 /** @type {import('vue').ComputedRef<Object[]>} */
 const itemsInRoom = computed(() => {
+  // Триггер для пересчета при изменении инвентаря (взять/бросить).
+  // eslint-disable-next-line no-unused-expressions
+  props.player.inventory.length;
+
   if (!currentRoom.value) return [];
   return currentRoom.value.items
     .map(itemId => props.gameEngine.getItem(itemId))
@@ -434,11 +442,14 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
               <button v-if="hasHealer" @click="$emit('command', 'heal')">✨ Исцелиться</button>
               
               <template v-for="npc in npcsInRoom" :key="npc.id">
+                <button @click="$emit('command', 'look ' + npc.name)">
+                  👁️ Осмотреть {{ npc.name }}
+                </button>
+                <button @click="$emit('command', 'talk ' + npc.name)">
+                  💬 Поговорить с {{ npc.name }}
+                </button>
                 <button v-if="npc.type === 'hostile'" @click="$emit('command', 'kill ' + npc.name)">
                   ⚔️ Убить {{ npc.name }}
-                </button>
-                <button v-else-if="!npc.canTrade && !npc.canHeal" @click="$emit('command', 'talk ' + npc.name)">
-                  💬 Поговорить с {{ npc.name }}
                 </button>
               </template>
 
