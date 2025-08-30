@@ -24,14 +24,17 @@ export class NPC {
    * Получает следующую реплику НПС
    * @returns {string} реплика
    */
-  speak() {
+  speak(game) {
     if (this.dialogue.length === 0) {
-      return `${this.name} молчит.`;
+      const name = game ? game.colorize(this.name, `npc-name npc-${this.type}`) : this.name;
+      return `${name} молчит.`;
     }
     
     const message = this.dialogue[this.currentDialogue];
     this.currentDialogue = (this.currentDialogue + 1) % this.dialogue.length;
-    return `${this.name} говорит: "${message}"`;
+    const name = game ? game.colorize(this.name, `npc-name npc-${this.type}`) : this.name;
+    const coloredMessage = game ? game.colorize(`"${message}"`, 'npc-speech') : `"${message}"`;
+    return `${name} говорит: ${coloredMessage}`;
   }
 
   /**

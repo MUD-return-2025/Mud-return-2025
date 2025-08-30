@@ -363,15 +363,15 @@ export class GameEngine {
     const playerDamage = this.calculatePlayerDamage();
     const npcAlive = npc.takeDamage(playerDamage);
     
-    result += `Вы наносите ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.\n`;
+    result += this.colorize(`Вы наносите ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack') + '\n';
     
     if (!npcAlive) {
       // НПС умер
-      result += `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} повержен!\n`;
+      result += this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} повержен!`, 'combat-npc-death') + '\n';
       
       if (npc.experience > 0) {
         this.player.addExperience(npc.experience);
-        result += `Вы получили ${npc.experience} опыта.\n`;
+        result += this.colorize(`Вы получили ${npc.experience} опыта.`, 'combat-exp-gain') + '\n';
       }
       
       // Дропы
@@ -392,11 +392,11 @@ export class GameEngine {
       const npcDamage = npc.rollDamage();
       this.player.takeDamage(npcDamage);
       
-      result += `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} наносит вам ${npcDamage} урона.\n`;
-      result += `У вас осталось ${this.player.hitPoints}/${this.player.maxHitPoints} HP.`;
+      result += this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} наносит вам ${npcDamage} урона.`, 'combat-npc-attack') + '\n';
+      result += this.colorize(`У вас осталось ${this.player.hitPoints}/${this.player.maxHitPoints} HP.`, 'combat-player-hp');
       
       if (this.player.hitPoints <= 0) {
-        result += '\nВы умерли!';
+        result += '\n' + this.colorize('Вы умерли!', 'combat-player-death');
         this.player.state = 'dead';
         this.combatTarget = null;
       }
@@ -432,14 +432,14 @@ export class GameEngine {
     }
     
     const currentRoom = this.getCurrentRoom();
-    let result = `Вы говорите: "${cmd.target}"\n\n`;
+    let result = this.colorize(`Вы говорите: "${cmd.target}"`, 'player-speech') + '\n\n';
     
     // Все НПС в локации реагируют
     const responses = [];
     currentRoom.npcs.forEach(npcId => {
       const npc = this.getNpc(npcId);
       if (npc?.isAlive()) {
-        responses.push(npc.speak());
+        responses.push(npc.speak(this));
       }
     });
     

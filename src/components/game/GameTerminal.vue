@@ -237,6 +237,41 @@ onMounted(() => {
   font-style: italic;
 }
 
+.message :deep(.player-speech) {
+  color: #dddddd; /* Светло-серый для речи игрока */
+  font-style: italic;
+}
+
+.message :deep(.npc-speech) {
+  color: #aaffaa; /* Слегка другой зеленый для речи НПС */
+}
+
+.message :deep(.combat-player-attack) {
+  color: #ffcc66; /* Оранжевый для атак игрока */
+}
+
+.message :deep(.combat-npc-attack) {
+  color: #ff6666; /* Светло-красный для атак НПС */
+}
+
+.message :deep(.combat-npc-death) {
+  color: #ff9999; /* Более светлый красный для смерти */
+  font-weight: bold;
+}
+
+.message :deep(.combat-exp-gain) {
+  color: #66ff66; /* Ярко-зеленый для опыта */
+}
+
+.message :deep(.combat-player-hp) {
+  color: #cccccc; /* Серый для статуса */
+}
+
+.message :deep(.combat-player-death) {
+  color: #ff3333; /* Ярко-красный для смерти игрока */
+  font-weight: bold;
+}
+
 .terminal-input {
   display: flex;
   align-items: center;
