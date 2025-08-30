@@ -58,6 +58,11 @@ export class GameEngine {
     this.commandParser.registerCommand('save', this.cmdSave.bind(this));
     this.commandParser.registerCommand('load', this.cmdLoad.bind(this));
     this.commandParser.registerCommand('heal', this.cmdHeal.bind(this));
+    this.commandParser.registerCommand('equip', this.cmdEquip.bind(this));
+    this.commandParser.registerCommand('unequip', this.cmdUnequip.bind(this));
+    this.commandParser.registerCommand('list', this.cmdList.bind(this));
+    this.commandParser.registerCommand('buy', this.cmdBuy.bind(this));
+    this.commandParser.registerCommand('sell', this.cmdSell.bind(this));
   }
 
   /**
@@ -337,12 +342,9 @@ export class GameEngine {
     const strBonus = Math.floor((this.player.strength - 10) / 2);
     baseDamage += strBonus;
     
-    // Бонус от оружия (если есть)
-    const weapon = this.player.inventory.find(item => item.type === 'weapon');
-    if (weapon) {
-      // Простая реализация - добавляем фиксированный бонус
-      baseDamage += 2;
-    }
+    // Бонус от экипированного оружия
+    const weaponBonus = this.player.getWeaponDamageBonus();
+    baseDamage += weaponBonus;
     
     return Math.max(1, baseDamage);
   }
@@ -436,6 +438,12 @@ export class GameEngine {
 • kill <цель> - атаковать цель
 • say <сообщение> - поговорить с НПС
 • use <предмет> - использовать предмет
+• equip <предмет> - экипировать оружие/броню
+• unequip <weapon/armor> - снять экипировку
+• list - посмотреть товары торговца
+• buy <товар> - купить товар у торговца
+• sell <предмет> - продать предмет торговцу
+• heal - исцелиться у жреца
 • save - сохранить игру
 • load - загрузить игру
 • help - эта справка
@@ -445,7 +453,8 @@ export class GameEngine {
 • север/с - go north
 • юг/ю - go south  
 • восток/в - go east
-• запад/з - go west`;
+• запад/з - go west
+• инв - inventory`;
   }
 
   /**
@@ -499,6 +508,153 @@ export class GameEngine {
     return 'Жрец исцелил ваши раны. Вы полностью здоровы.';
   }
 
+  /**
+   * Команда: equip - экипировка предмета
+   */
+  cmdEquip(cmd) {
+    if (!cmd.target) {
+      return 'Что вы хотите экипировать?';
+    }
+
+    const item = this.player.findItem(cmd.target);
+    if (!item) {
+      return `У вас нет "${cmd.target}".`;
+    }
+
+    if (item.type === 'weapon') {
+      return this.player.equipWeapon(item);
+    } else if (item.type === 'armor') {
+      return this.player.equipArmor(item);
+    } else {
+      return `${item.name} нельзя экипировать.`;
+    }
+  }
+
+  /**
+   * Команда: unequip - снятие экипировки
+   */
+  cmdUnequip(cmd) {
+    if (!cmd.target) {
+      return 'Что вы хотите снять? (weapon/armor)';
+    }
+
+    const target = cmd.target.toLowerCase();
+    if (target.includes('weapon') || target.includes('оружие')) {
+      return this.player.unequipWeapon();
+    } else if (target.includes('armor') || target.includes('броня')) {
+      return this.player.unequipArmor();
+    } else {
+      return 'Укажите "weapon" или "armor" для снятия экипировки.';
+    }
+  }
+
+  /**
+   * Команда: list - просмотр товаров торговца
+   */
+  cmdList() {
+    const currentRoom = this.getCurrentRoom();
+    const merchant = currentRoom.npcs.find(npcId => {
+      const npc = this.getNpc(npcId);
+      return npc && npc.canTrade && npc.canTrade();
+    });
+
+    if (!merchant) {
+      return 'Здесь нет торговцев.';
+    }
+
+    const npc = this.getNpc(merchant);
+    const shopItems = npc.getShopItems();
+    
+    if (shopItems.length === 0) {
+      return `${npc.name} говорит: "Извините, товар закончился."`;
+    }
+
+    let result = `${npc.name} предлагает:\n`;
+    shopItems.forEach((itemId, index) => {
+      const item = this.getItem(itemId);
+      if (item) {
+        result += `${index + 1}. ${item.name} - ${item.value || 'N/A'} золота\n`;
+      }
+    });
+
+    result += '\nИспользуйте "buy <название>" для покупки.';
+    return result;
+  }
+
+  /**
+   * Команда: buy - покупка товара
+   */
+  cmdBuy(cmd) {
+    if (!cmd.target) {
+      return 'Что вы хотите купить?';
+    }
+
+    const currentRoom = this.getCurrentRoom();
+    const merchant = currentRoom.npcs.find(npcId => {
+      const npc = this.getNpc(npcId);
+      return npc && npc.canTrade && npc.canTrade();
+    });
+
+    if (!merchant) {
+      return 'Здесь нет торговцев.';
+    }
+
+    const npc = this.getNpc(merchant);
+    const shopItems = npc.getShopItems();
+    const target = cmd.target.toLowerCase();
+
+    // Ищем товар в магазине
+    const itemId = shopItems.find(itemId => {
+      const item = this.getItem(itemId);
+      return item && item.name.toLowerCase().includes(target);
+    });
+
+    if (!itemId) {
+      return `${npc.name} говорит: "У меня нет такого товара."`;
+    }
+
+    const item = this.getItem(itemId);
+    
+    // Проверяем, может ли игрок нести предмет
+    if (!this.player.canCarry(item)) {
+      return `${npc.name} говорит: "Этот товар слишком тяжел для вас."`;
+    }
+
+    // В упрощенной версии покупка бесплатная
+    this.player.addItem(item);
+    return `${npc.name} говорит: "Вот ваш ${item.name}. Пользуйтесь на здоровье!"`;
+  }
+
+  /**
+   * Команда: sell - продажа предмета торговцу
+   */
+  cmdSell(cmd) {
+    if (!cmd.target) {
+      return 'Что вы хотите продать?';
+    }
+
+    const currentRoom = this.getCurrentRoom();
+    const merchant = currentRoom.npcs.find(npcId => {
+      const npc = this.getNpc(npcId);
+      return npc && npc.canTrade && npc.canTrade();
+    });
+
+    if (!merchant) {
+      return 'Здесь нет торговцев.';
+    }
+
+    const item = this.player.findItem(cmd.target);
+    if (!item) {
+      return `У вас нет "${cmd.target}".`;
+    }
+
+    const npc = this.getNpc(merchant);
+    this.player.removeItem(item.id);
+    
+    const sellPrice = Math.floor((item.value || 10) / 2);
+    return `${npc.name} говорит: "Спасибо за ${item.name}! Вот вам ${sellPrice} золота." (В этой версии золото пока не реализовано)`;
+  }
+
   // Вспомогательные методы
 
   /**
@@ -547,7 +703,9 @@ export class GameEngine {
         charisma: this.player.charisma,
         inventory: this.player.inventory,
         currentRoom: this.player.currentRoom,
-        state: this.player.state
+        state: this.player.state,
+        equippedWeapon: this.player.equippedWeapon,
+        equippedArmor: this.player.equippedArmor
       },
       rooms: Object.fromEntries(this.rooms),
       npcs: Object.fromEntries(this.npcs),

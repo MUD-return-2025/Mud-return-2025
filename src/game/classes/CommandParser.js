@@ -1,4 +1,3 @@
-
 /**
  * Парсер и обработчик игровых команд
  * Преобразует текстовый ввод в игровые действия
@@ -41,30 +40,46 @@ export class CommandParser {
   }
 
   /**
-   * Парсит введенную команду
-   * @param {string} input - текстовая команда от игрока
-   * @returns {Object} объект команды
+   * Парсит текстовую команду
+   * @param {string} input - ввод пользователя
+   * @returns {Object} объект команды {command, args, target, original}
    */
   parseCommand(input) {
     if (!input || typeof input !== 'string') {
-      return { command: 'unknown', args: [], original: '' };
+      return { command: '', args: [], target: '', original: '' };
     }
 
-    const trimmed = input.trim().toLowerCase();
-    
-    // Проверяем алиасы
-    for (let [alias, fullCommand] of this.aliases) {
-      if (trimmed === alias || trimmed.startsWith(alias + ' ')) {
-        // Заменяем алиас на полную команду
-        const remaining = trimmed.slice(alias.length).trim();
-        input = remaining ? `${fullCommand} ${remaining}` : fullCommand;
-        break;
-      }
-    }
-
-    const parts = input.trim().split(/\s+/);
-    const command = parts[0]?.toLowerCase() || 'unknown';
+    const parts = input.trim().toLowerCase().split(/\s+/);
+    let command = parts[0];
     const args = parts.slice(1);
+
+    // Обработка сокращений команд
+    const shortcuts = {
+      'л': 'look',
+      'идти': 'go',
+      'иди': 'go',
+      'инв': 'inventory',
+      'взять': 'get',
+      'бросить': 'drop',
+      'убить': 'kill',
+      'сказать': 'say',
+      'использовать': 'use',
+      'экипировать': 'equip',
+      'снять': 'unequip',
+      'купить': 'buy',
+      'продать': 'sell',
+      'список': 'list',
+      'характеристики': 'stats',
+      'исцелить': 'heal',
+      'сохранить': 'save',
+      'загрузить': 'load',
+      'помощь': 'help',
+      'справка': 'help'
+    };
+
+    if (shortcuts[command]) {
+      command = shortcuts[command];
+    }
 
     return {
       command,
@@ -91,7 +106,7 @@ export class CommandParser {
    */
   executeCommand(parsedCommand, game) {
     const handler = this.commands.get(parsedCommand.command);
-    
+
     if (handler) {
       try {
         return handler(parsedCommand, game);
@@ -100,7 +115,7 @@ export class CommandParser {
         return 'Произошла ошибка при выполнении команды.';
       }
     }
-    
+
     return this.getUnknownCommandMessage(parsedCommand.command);
   }
 

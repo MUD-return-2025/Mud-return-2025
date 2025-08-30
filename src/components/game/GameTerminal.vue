@@ -1,222 +1,119 @@
-
 <template>
   <div class="game-terminal">
-    <!-- Область вывода сообщений -->
-    <div class="output-area" ref="outputArea">
-      <div 
-        v-for="(message, index) in messages" 
-        :key="index" 
-        class="message"
-        v-html="formatMessage(message)"
-      ></div>
+    <div class="terminal-output" ref="outputElement">
+      <div class="welcome-message">
+        <p>🏰 Добро пожаловать в Мидгард! 🏰</p>
+        <p>Введите "new" для начала новой игры или "load" для загрузки сохранения.</p>
+      </div>
+
+      <div v-for="(message, index) in gameMessages" :key="index" class="message">
+        {{ message }}
+      </div>
     </div>
-    
-    <!-- Строка ввода -->
-    <div class="input-area">
-      <span class="prompt">&gt; </span>
-      <input 
-        ref="inputField"
+
+    <div class="terminal-input">
+      <span class="prompt">></span>
+      <input
         v-model="currentInput"
-        @keydown.enter="executeCommand"
-        @keydown.up="historyUp"
-        @keydown.down="historyDown"
-        class="command-input"
+        @keyup.enter="processCommand"
+        ref="inputElement"
         placeholder="Введите команду..."
-        :disabled="gameState !== 'playing'"
+        autocomplete="off"
       />
     </div>
-    
-    <!-- Панель статуса игрока -->
-    <div class="status-bar" v-if="gameState === 'playing'">
-      <span class="hp">HP: {{ player.hitPoints }}/{{ player.maxHitPoints }}</span>
-      <span class="level">Ур. {{ player.level }}</span>
-      <span class="exp">Опыт: {{ player.experience }}/{{ player.experienceToNext }}</span>
-      <span class="location">{{ currentRoomName }}</span>
+
+    <div class="player-stats" v-if="gameStarted">
+      <h3>📊 Статистика</h3>
+      <div class="stat-line">💗 HP: {{ player.hitPoints }}/{{ player.maxHitPoints }}</div>
+      <div class="stat-line">⭐ Уровень: {{ player.level }}</div>
+      <div class="stat-line">✨ Опыт: {{ player.experience }}/{{ player.experienceToNext }}</div>
+      <div class="stat-line">💪 Сила: {{ player.strength }}</div>
+      <div class="stat-line">⚡ Ловкость: {{ player.dexterity }}</div>
+      <div class="stat-line">🛡️ Телосложение: {{ player.constitution }}</div>
+
+      <div v-if="player.equippedWeapon" class="equipped-item">
+        ⚔️ Оружие: {{ player.equippedWeapon.name }}
+      </div>
+      <div v-if="player.equippedArmor" class="equipped-item">
+        🛡️ Броня: {{ player.equippedArmor.name }}
+      </div>
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, computed, nextTick, onMounted, onUnmounted, watch } from 'vue';
+import { ref, reactive, onMounted, nextTick, watch } from 'vue';
 import { GameEngine } from '../../game/GameEngine.js';
 
-// Реактивные данные
-const game = ref(new GameEngine());
+const gameEngine = new GameEngine();
+const gameMessages = ref([]);
 const currentInput = ref('');
-const messages = ref([]);
-const commandHistory = ref([]);
-const historyIndex = ref(-1);
-const outputArea = ref(null);
-const inputField = ref(null);
+const gameStarted = ref(false);
+const outputElement = ref(null);
+const inputElement = ref(null);
 
-// Вычисляемые свойства
-const gameState = computed(() => game.value.gameState);
-const player = computed(() => game.value.player);
-const currentRoomName = computed(() => {
-  if (gameState.value !== 'playing') return '';
-  const room = game.value.getCurrentRoom();
-  return room ? room.name : '';
-});
+const player = reactive(gameEngine.player);
 
-/**
- * Выполняет введенную команду
- */
-const executeCommand = async () => {
-  const command = currentInput.value.trim();
-  if (!command) return;
-  
-  // Добавляем в историю команд
-  commandHistory.value.push(command);
-  if (commandHistory.value.length > 50) {
-    commandHistory.value = commandHistory.value.slice(-25);
-  }
-  historyIndex.value = -1;
-  
-  // Добавляем команду в вывод
-  messages.value.push(`> ${command}`);
-  
-  // Выполняем команду
-  const result = game.value.processCommand(command);
-  messages.value.push(result);
-  
-  // Ограничиваем количество сообщений
-  if (messages.value.length > 200) {
-    messages.value = messages.value.slice(-100);
-  }
-  
-  currentInput.value = '';
-  
-  // Прокручиваем вниз
-  await nextTick();
-  scrollToBottom();
-};
-
-/**
- * Навигация по истории команд (стрелка вверх)
- */
-const historyUp = () => {
-  if (commandHistory.value.length === 0) return;
-  
-  if (historyIndex.value === -1) {
-    historyIndex.value = commandHistory.value.length - 1;
-  } else if (historyIndex.value > 0) {
-    historyIndex.value--;
-  }
-  
-  currentInput.value = commandHistory.value[historyIndex.value];
-};
-
-/**
- * Навигация по истории команд (стрелка вниз)
- */
-const historyDown = () => {
-  if (historyIndex.value === -1) return;
-  
-  if (historyIndex.value < commandHistory.value.length - 1) {
-    historyIndex.value++;
-    currentInput.value = commandHistory.value[historyIndex.value];
-  } else {
-    historyIndex.value = -1;
-    currentInput.value = '';
-  }
-};
-
-/**
- * Прокручивает область вывода вниз
- */
+// Автоскролл к низу при добавлении сообщений
 const scrollToBottom = () => {
-  if (outputArea.value) {
-    outputArea.value.scrollTop = outputArea.value.scrollHeight;
-  }
-};
-
-/**
- * Форматирует сообщение для вывода (простое форматирование)
- * @param {string} message - сообщение
- * @returns {string} отформатированное сообщение
- */
-const formatMessage = (message) => {
-  // Простое форматирование - заменяем переносы строк на <br>
-  return message.replace(/\n/g, '<br>');
-};
-
-/**
- * Начинает новую игру
- */
-const startNewGame = () => {
-  const playerName = prompt('Введите имя персонажа:', 'Герой') || 'Герой';
-  const welcomeMessage = game.value.startNewGame(playerName);
-  messages.value = [welcomeMessage];
-  
   nextTick(() => {
-    if (inputField.value) {
-      inputField.value.focus();
+    if (outputElement.value) {
+      outputElement.value.scrollTop = outputElement.value.scrollHeight;
     }
   });
 };
 
-/**
- * Загружает сохраненную игру
- */
-const loadSavedGame = () => {
-  const loaded = game.value.loadGame();
-  if (loaded) {
-    game.value.gameState = 'playing';
-    const currentRoom = game.value.getCurrentRoom();
-    messages.value = [
-      'Игра загружена.',
-      '',
-      currentRoom.getFullDescription(game.value)
-    ];
-  } else {
-    messages.value = ['Сохраненная игра не найдена. Начинаем новую игру.'];
-    startNewGame();
-  }
-  
-  nextTick(() => {
-    if (inputField.value) {
-      inputField.value.focus();
-    }
-  });
-};
+watch(gameMessages, scrollToBottom, { deep: true });
 
-// Следим за изменениями сообщений для автопрокрутки
-watch(messages, () => {
-  nextTick(scrollToBottom);
-});
+const processCommand = () => {
+  const input = currentInput.value.trim();
+  if (!input) return;
 
-// Инициализация при монтировании компонента
-onMounted(() => {
-  // Проверяем, есть ли сохранение
-  const hasSave = localStorage.getItem('mudgame_save');
-  
-  if (hasSave) {
-    const choice = confirm('Найдено сохранение. Загрузить игру?');
-    if (choice) {
-      loadSavedGame();
+  if (!gameStarted.value) {
+    if (input.toLowerCase() === 'new') {
+      const welcomeMsg = gameEngine.startNewGame();
+      gameMessages.value = welcomeMsg.split('\n');
+      gameStarted.value = true;
+      Object.assign(player, gameEngine.player);
+    } else if (input.toLowerCase() === 'load') {
+      if (gameEngine.loadGame()) {
+        gameMessages.value.push('Игра загружена!');
+        const currentRoom = gameEngine.getCurrentRoom();
+        gameMessages.value.push('', currentRoom.getFullDescription(gameEngine));
+        gameStarted.value = true;
+        Object.assign(player, gameEngine.player);
+      } else {
+        gameMessages.value.push('Сохранение не найдено. Используйте "new" для новой игры.');
+      }
     } else {
-      startNewGame();
+      gameMessages.value.push('Используйте "new" для новой игры или "load" для загрузки.');
     }
   } else {
-    startNewGame();
-  }
-});
+    const result = gameEngine.processCommand(input);
+    gameMessages.value.push(`> ${input}`);
+    gameMessages.value.push(...result.split('\n'));
 
-// Автосохранение каждые 30 секунд
-let autoSaveInterval;
+    // Обновляем данные игрока
+    Object.assign(player, gameEngine.player);
+
+    // Автосохранение каждые несколько команд
+    if (gameMessages.value.length % 10 === 0) {
+      gameEngine.saveGame();
+    }
+  }
+
+  currentInput.value = '';
+};
+
 onMounted(() => {
-  autoSaveInterval = setInterval(() => {
-    if (gameState.value === 'playing') {
-      game.value.saveGame();
+  inputElement.value?.focus();
+
+  // Автосохранение каждые 30 секунд
+  setInterval(() => {
+    if (gameStarted.value) {
+      gameEngine.saveGame();
     }
   }, 30000);
-});
-
-// Очистка при размонтировании
-onUnmounted(() => {
-  if (autoSaveInterval) {
-    clearInterval(autoSaveInterval);
-  }
 });
 </script>
 
@@ -224,108 +121,93 @@ onUnmounted(() => {
 .game-terminal {
   display: flex;
   flex-direction: column;
-  height: 100vh;
-  max-height: 100vh;
-  font-family: 'Courier New', monospace;
+  height: calc(100vh - 120px);
   background-color: #000;
-  color: #00ff00;
-  padding: 10px;
-  box-sizing: border-box;
+  border: 2px solid #00ff00;
+  font-family: 'Courier New', monospace;
 }
 
-.output-area {
+.terminal-output {
   flex: 1;
-  overflow-y: auto;
-  margin-bottom: 10px;
   padding: 10px;
-  background-color: #111;
-  border: 1px solid #333;
-  white-space: pre-wrap;
-  word-wrap: break-word;
-}
-
-.message {
-  margin-bottom: 5px;
+  overflow-y: auto;
+  background-color: #001100;
+  color: #00ff00;
+  font-size: 14px;
   line-height: 1.4;
 }
 
-.input-area {
+.welcome-message {
+  color: #ffff00;
+  text-align: center;
+  margin-bottom: 20px;
+}
+
+.message {
+  margin: 2px 0;
+  white-space: pre-wrap;
+}
+
+.terminal-input {
   display: flex;
   align-items: center;
-  background-color: #111;
-  border: 1px solid #333;
-  padding: 5px;
+  padding: 10px;
+  background-color: #002200;
+  border-top: 1px solid #00ff00;
 }
 
 .prompt {
   color: #00ff00;
-  margin-right: 5px;
+  margin-right: 8px;
   font-weight: bold;
 }
 
-.command-input {
+input {
   flex: 1;
   background: transparent;
   border: none;
   color: #00ff00;
-  font-family: inherit;
+  font-family: 'Courier New', monospace;
   font-size: 14px;
   outline: none;
 }
 
-.command-input::placeholder {
+input::placeholder {
   color: #006600;
 }
 
-.command-input:disabled {
-  color: #666;
-}
-
-.status-bar {
-  display: flex;
-  justify-content: space-between;
-  padding: 5px 10px;
-  background-color: #222;
-  border: 1px solid #333;
-  margin-top: 10px;
+.player-stats {
+  position: absolute;
+  top: 80px;
+  right: 10px;
+  width: 250px;
+  background-color: #001100;
+  border: 1px solid #00ff00;
+  padding: 10px;
   font-size: 12px;
 }
 
-.status-bar span {
+.stat-line {
+  margin: 3px 0;
+  color: #00ff00;
+}
+
+.equipped-item {
+  margin: 5px 0;
   color: #ffff00;
+  font-weight: bold;
 }
 
-.hp {
-  color: #ff4444 !important;
-}
-
-.level {
-  color: #44ff44 !important;
-}
-
-.exp {
-  color: #4444ff !important;
-}
-
-.location {
-  color: #ff44ff !important;
-}
-
-/* Скроллбар для области вывода */
-.output-area::-webkit-scrollbar {
+.terminal-output::-webkit-scrollbar {
   width: 8px;
 }
 
-.output-area::-webkit-scrollbar-track {
-  background: #222;
+.terminal-output::-webkit-scrollbar-track {
+  background: #001100;
 }
 
-.output-area::-webkit-scrollbar-thumb {
-  background: #444;
+.terminal-output::-webkit-scrollbar-thumb {
+  background: #00ff00;
   border-radius: 4px;
-}
-
-.output-area::-webkit-scrollbar-thumb:hover {
-  background: #666;
 }
 </style>

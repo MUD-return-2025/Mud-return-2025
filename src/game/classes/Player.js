@@ -24,6 +24,8 @@ export class Player {
     this.currentRoom = 'center';
     this.state = 'idle'; // idle, fighting, dead
     this.target = null; // текущая цель в бою
+    this.equippedWeapon = null; // экипированное оружие
+    this.equippedArmor = null; // экипированная броня
   }
 
   /**
@@ -162,5 +164,119 @@ export class Player {
   canCarry(item) {
     const maxWeight = this.strength * 10; // максимальный вес = сила * 10
     return this.getTotalWeight() + (item.weight || 0) <= maxWeight;
+  }
+
+  /**
+   * Экипирует оружие
+   * @param {Object} weapon - оружие для экипировки
+   * @returns {string} результат экипировки
+   */
+  equipWeapon(weapon) {
+    if (weapon.type !== 'weapon') {
+      return `${weapon.name} не является оружием.`;
+    }
+
+    let result = '';
+    if (this.equippedWeapon) {
+      this.addItem(this.equippedWeapon);
+      result += `Вы сняли ${this.equippedWeapon.name}. `;
+    }
+
+    this.equippedWeapon = weapon;
+    this.removeItem(weapon.id);
+    result += `Вы экипировали ${weapon.name}.`;
+    return result;
+  }
+
+  /**
+   * Экипирует броню
+   * @param {Object} armor - броня для экипировки
+   * @returns {string} результат экипировки
+   */
+  equipArmor(armor) {
+    if (armor.type !== 'armor') {
+      return `${armor.name} не является броней.`;
+    }
+
+    let result = '';
+    if (this.equippedArmor) {
+      this.addItem(this.equippedArmor);
+      result += `Вы сняли ${this.equippedArmor.name}. `;
+    }
+
+    this.equippedArmor = armor;
+    this.removeItem(armor.id);
+    result += `Вы экипировали ${armor.name}.`;
+    return result;
+  }
+
+  /**
+   * Снимает экипированное оружие
+   * @returns {string} результат
+   */
+  unequipWeapon() {
+    if (!this.equippedWeapon) {
+      return 'У вас нет экипированного оружия.';
+    }
+
+    this.addItem(this.equippedWeapon);
+    const weaponName = this.equippedWeapon.name;
+    this.equippedWeapon = null;
+    return `Вы сняли ${weaponName}.`;
+  }
+
+  /**
+   * Снимает экипированную броню
+   * @returns {string} результат
+   */
+  unequipArmor() {
+    if (!this.equippedArmor) {
+      return 'У вас нет экипированной брони.';
+    }
+
+    this.addItem(this.equippedArmor);
+    const armorName = this.equippedArmor.name;
+    this.equippedArmor = null;
+    return `Вы сняли ${armorName}.`;
+  }
+
+  /**
+   * Получает бонус к урону от экипированного оружия
+   * @returns {number} бонус к урону
+   */
+  getWeaponDamageBonus() {
+    if (!this.equippedWeapon) {
+      return 0;
+    }
+    
+    // Парсим урон оружия (например "1d6+1")
+    const match = this.equippedWeapon.damage?.match(/(\d+)d(\d+)(?:([+-])(\d+))?/);
+    if (!match) {
+      return 2; // базовый бонус
+    }
+    
+    const [, diceCount, diceSize, operator, modifier] = match;
+    let weaponDamage = 0;
+    
+    // Бросаем кубики оружия
+    for (let i = 0; i < parseInt(diceCount); i++) {
+      weaponDamage += Math.floor(Math.random() * parseInt(diceSize)) + 1;
+    }
+    
+    // Применяем модификатор
+    if (operator && modifier) {
+      const mod = parseInt(modifier);
+      weaponDamage += operator === '+' ? mod : -mod;
+    }
+    
+    return Math.max(1, weaponDamage);
+  }
+
+  /**
+   * Получает бонус к защите от экипированной брони
+   * @returns {number} бонус к защите
+   */
+  getArmorDefenseBonus() {
+    return this.equippedArmor ? (this.equippedArmor.armor || 0) : 0;
   }
 }
