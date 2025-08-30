@@ -543,7 +543,7 @@ export class GameEngine {
     // --- Ход игрока ---
     const playerDamage = this.calculatePlayerDamage();
     const npcAlive = npc.takeDamage(playerDamage);
-    result += this.colorize(`Вы наносите ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack');
+    result += ' \n' + this.colorize(`Вы наносите ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack');
     
     if (!npcAlive) {
       // НПС умер от атаки игрока

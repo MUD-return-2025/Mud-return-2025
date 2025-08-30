@@ -105,8 +105,9 @@ watch(gameMessages, scrollToBottom, { deep: true });
 const executeCommand = (command) => {
   if (!gameStarted.value) return;
   
-  const result = gameEngine.processCommand(command);
+  gameMessages.value.push(` `);
   if (command) gameMessages.value.push(`> ${command}`);
+  const result = gameEngine.processCommand(command);
   if (result) gameMessages.value.push(...result.split('\n'));
 
   // Автосохранение каждые несколько команд
