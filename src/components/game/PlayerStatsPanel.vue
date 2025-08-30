@@ -1,11 +1,12 @@
 <script setup>
 // Компонент Vue для отображения панели статистики игрока, инвентаря, экипировки и карты.
-import { ref, computed, inject } from 'vue';
+import { ref, computed, inject, watch } from 'vue';
 
 /**
  * @property {Object} player - Объект с данными игрока.
  * @property {Boolean} gameStarted - Флаг, указывающий, началась ли игра.
  * @property {Object} gameEngine - Экземпляр игрового движка.
+ * @property {Number} updateCounter - Счетчик обновлений для принудительной перерисовки.
  */
 const props = defineProps({
   player: {
@@ -18,6 +19,10 @@ const props = defineProps({
   },
   gameEngine: {
     type: Object,
+    required: true
+  },
+  updateCounter: {
+    type: Number,
     required: true
   }
 });
@@ -56,6 +61,25 @@ const togglePanel = () => {
  */
 const selectItem = (item) => {
   selectedItem.value = selectedItem.value?.id === item.id ? null : item;
+};
+
+watch(
+  () => props.player,
+  (newPlayer) => {
+    // Если выбранный предмет больше не находится в инвентаре, сбрасываем выбор.
+    if (selectedItem.value && !newPlayer.inventory.some(item => item.id === selectedItem.value.id)) {
+      selectedItem.value = null;
+    }
+  },
+  { deep: true }
+);
+
+/**
+ * Обрабатывает действие с предметом (использование, выбрасывание, экипировка)
+ * @param {string} command - Команда для отправки в игровой движок.
+ */
+const handleItemAction = (command) => {
+  emit('command', command);
 };
 
 /**
@@ -146,12 +170,8 @@ const currentRoom = computed(() => {
 
 /** @type {import('vue').ComputedRef<import('../../game/classes/NPC').NPC[]>} */
 const npcsInRoom = computed(() => {
-  // Триггер для пересчета при изменении состояния игрока (например, после боя).
   // eslint-disable-next-line no-unused-expressions
-  props.player.experience;
-  // Триггер для общих обновлений UI (например, респавн).
-  props.player.ui_version;
-
+  props.updateCounter; // Зависимость для пересчета
   if (!currentRoom.value) return [];
   return currentRoom.value.npcs
     .map(npcId => props.gameEngine.getNpc(npcId))
@@ -160,12 +180,8 @@ const npcsInRoom = computed(() => {
 
 /** @type {import('vue').ComputedRef<Object[]>} */
 const itemsInRoom = computed(() => {
-  // Триггер для пересчета при изменении инвентаря (взять/бросить).
   // eslint-disable-next-line no-unused-expressions
-  props.player.inventory.length;
-  // Триггер для общих обновлений UI.
-  props.player.ui_version;
-
+  props.updateCounter; // Зависимость для пересчета
   if (!currentRoom.value) return [];
   return currentRoom.value.items
     .map(itemId => props.gameEngine.getItem(itemId))
@@ -263,27 +279,27 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
             <div class="item-actions">
               <button 
                 v-if="selectedItem.type === 'weapon'" 
-                @click="$emit('command', 'equip ' + selectedItem.name)"
+                @click="handleItemAction('equip ' + selectedItem.name)"
                 class="action-btn"
               >
                 Экипировать
               </button>
               <button 
                 v-if="selectedItem.type === 'armor'" 
-                @click="$emit('command', 'equip ' + selectedItem.name)"
+                @click="handleItemAction('equip ' + selectedItem.name)"
                 class="action-btn"
               >
                 Экипировать
               </button>
               <button 
                 v-if="selectedItem.type === 'potion'" 
-                @click="$emit('command', 'use ' + selectedItem.name)"
+                @click="handleItemAction('use ' + selectedItem.name)"
                 class="action-btn"
               >
                 Использовать
               </button>
               <button 
-                @click="$emit('command', 'drop ' + selectedItem.name)"
+                @click="handleItemAction('drop ' + selectedItem.name)"
                 class="action-btn danger"
               >
                 Бросить

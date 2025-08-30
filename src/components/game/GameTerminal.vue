@@ -30,6 +30,7 @@
       :player="player" 
       :game-started="gameStarted"
       :game-engine="gameEngine"
+      :update-counter="updateCounter"
       @command="executeCommand"
       @move="handleMove"
     />
@@ -48,6 +49,7 @@ const gameStarted = ref(false);
 const commandHistory = ref([]);
 const historyIndex = ref(0);
 let tempInputOnNavStart = '';
+const updateCounter = ref(0);
 const outputElement = ref(null);
 const inputElement = ref(null);
 const isFullscreen = ref(false);
@@ -107,9 +109,6 @@ const executeCommand = (command) => {
   gameMessages.value.push(`> ${command}`);
   gameMessages.value.push(...result.split('\n'));
 
-  // Обновляем данные игрока
-  Object.assign(player, gameEngine.player);
-
   // Автосохранение каждые несколько команд
   if (gameMessages.value.length % 10 === 0) {
     gameEngine.saveGame();
@@ -120,9 +119,6 @@ const handleMove = (message) => {
   if (!gameStarted.value) return;
   
   gameMessages.value.push(message);
-  
-  // Обновляем данные игрока
-  Object.assign(player, gameEngine.player);
   
   // Автосохранение
   gameEngine.saveGame();
@@ -168,6 +164,12 @@ onMounted(() => {
   inputElement.value?.focus();
   historyIndex.value = commandHistory.value.length;
 
+  gameEngine.on('update', () => {
+    // Обновляем реактивный объект игрока, чтобы UI (панель статистики) перерисовался
+    Object.assign(player, gameEngine.player);
+    updateCounter.value++;
+  });
+
   let tickCount = 0;
   // Основной игровой цикл, запускается каждую секунду
   setInterval(() => {
@@ -176,8 +178,6 @@ onMounted(() => {
       const tickMessages = gameEngine.update();
       if (tickMessages.length > 0) {
         gameMessages.value.push(...tickMessages);
-        // Обновляем реактивный объект игрока, чтобы UI (панель статистики) перерисовался
-        Object.assign(player, gameEngine.player);
       }
 
       // 2. Автосохранение каждые 30 секунд

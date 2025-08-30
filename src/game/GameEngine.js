@@ -24,12 +24,36 @@ export class GameEngine {
     this.gameState = 'menu'; // menu, playing, paused
     this.combatTarget = null; // текущая цель в бою
     this.respawnQueue = []; // очередь для возрождения НПС
+    this.listeners = {}; // { eventName: [callback, ...] }
     
     this.initializeWorld();
     this.registerCommands();
 
     // Основной игровой цикл для обработки асинхронных событий, таких как возрождение
     // this.gameLoopInterval = setInterval(() => this.update(), 1000); // Управление циклом передано в GameTerminal.vue
+  }
+
+  /**
+   * Подписывается на событие
+   * @param {string} eventName 
+   * @param {Function} callback 
+   */
+  on(eventName, callback) {
+    if (!this.listeners[eventName]) {
+      this.listeners[eventName] = [];
+    }
+    this.listeners[eventName].push(callback);
+  }
+
+  /**
+   * Вызывает событие
+   * @param {string} eventName 
+   * @param  {...any} args 
+   */
+  emit(eventName, ...args) {
+    if (this.listeners[eventName]) {
+      this.listeners[eventName].forEach(callback => callback(...args));
+    }
   }
 
   /**
@@ -160,6 +184,9 @@ export class GameEngine {
 
     const parsed = this.commandParser.parseCommand(input);
     const result = this.commandParser.executeCommand(parsed, this);
+
+    // После каждой команды оповещаем UI о возможном изменении состояния
+    this.emit('update');
     
     // Добавляем команду и результат в историю
     this.messageHistory.push(`> ${input}`);
@@ -177,6 +204,7 @@ export class GameEngine {
    * Основной метод обновления, вызываемый в игровом цикле.
    */
   update() {
+    // checkRespawns теперь сам вызывает emit('update') при необходимости
     const messages = this.checkRespawns();
     return messages;
   }
@@ -199,7 +227,7 @@ export class GameEngine {
           // NEW: Check if player is in the room and add a message
           if (this.player.currentRoom === entry.roomId) {
               messages.push(this.colorize(`${npc.name} появляется из тени!`, 'combat-npc-death'));
-              this.player.ui_version++; // Триггер для обновления UI
+              this.emit('update'); // Оповещаем UI об обновлении
           }
         }
         return false; // Удаляем из очереди
@@ -297,6 +325,8 @@ export class GameEngine {
     
     this.player.currentRoom = exitRoomId;
     const newRoom = this.getCurrentRoom();
+
+    this.emit('update');
     
     return `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}`;
   }
@@ -944,6 +974,8 @@ ${this.getCurrentRoom().getFullDescription(this)}
     this.player.currentRoom = targetRoomId;
     const newRoom = this.getCurrentRoom();
     
+    this.emit('update');
+
     return { 
       success: true, 
       message: `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}` 
