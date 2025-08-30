@@ -22,28 +22,18 @@
       />
     </div>
 
-    <div class="player-stats" v-if="gameStarted">
-      <h3>📊 Статистика</h3>
-      <div class="stat-line">💗 HP: {{ player.hitPoints }}/{{ player.maxHitPoints }}</div>
-      <div class="stat-line">⭐ Уровень: {{ player.level }}</div>
-      <div class="stat-line">✨ Опыт: {{ player.experience }}/{{ player.experienceToNext }}</div>
-      <div class="stat-line">💪 Сила: {{ player.strength }}</div>
-      <div class="stat-line">⚡ Ловкость: {{ player.dexterity }}</div>
-      <div class="stat-line">🛡️ Телосложение: {{ player.constitution }}</div>
-
-      <div v-if="player.equippedWeapon" class="equipped-item">
-        ⚔️ Оружие: {{ player.equippedWeapon.name }}
-      </div>
-      <div v-if="player.equippedArmor" class="equipped-item">
-        🛡️ Броня: {{ player.equippedArmor.name }}
-      </div>
-    </div>
+    <PlayerStatsPanel 
+      :player="player" 
+      :game-started="gameStarted"
+      @command="executeCommand"
+    />
   </div>
 </template>
 
 <script setup>
 import { ref, reactive, onMounted, nextTick, watch } from 'vue';
 import { GameEngine } from '../../game/GameEngine.js';
+import PlayerStatsPanel from './PlayerStatsPanel.vue';
 
 const gameEngine = new GameEngine();
 const gameMessages = ref([]);
@@ -64,6 +54,22 @@ const scrollToBottom = () => {
 };
 
 watch(gameMessages, scrollToBottom, { deep: true });
+
+const executeCommand = (command) => {
+  if (!gameStarted.value) return;
+  
+  const result = gameEngine.processCommand(command);
+  gameMessages.value.push(`> ${command}`);
+  gameMessages.value.push(...result.split('\n'));
+
+  // Обновляем данные игрока
+  Object.assign(player, gameEngine.player);
+
+  // Автосохранение каждые несколько команд
+  if (gameMessages.value.length % 10 === 0) {
+    gameEngine.saveGame();
+  }
+};
 
 const processCommand = () => {
   const input = currentInput.value.trim();
@@ -89,17 +95,7 @@ const processCommand = () => {
       gameMessages.value.push('Используйте "new" для новой игры или "load" для загрузки.');
     }
   } else {
-    const result = gameEngine.processCommand(input);
-    gameMessages.value.push(`> ${input}`);
-    gameMessages.value.push(...result.split('\n'));
-
-    // Обновляем данные игрока
-    Object.assign(player, gameEngine.player);
-
-    // Автосохранение каждые несколько команд
-    if (gameMessages.value.length % 10 === 0) {
-      gameEngine.saveGame();
-    }
+    executeCommand(input);
   }
 
   currentInput.value = '';
@@ -176,27 +172,7 @@ input::placeholder {
   color: #006600;
 }
 
-.player-stats {
-  position: absolute;
-  top: 80px;
-  right: 10px;
-  width: 250px;
-  background-color: #001100;
-  border: 1px solid #00ff00;
-  padding: 10px;
-  font-size: 12px;
-}
 
-.stat-line {
-  margin: 3px 0;
-  color: #00ff00;
-}
-
-.equipped-item {
-  margin: 5px 0;
-  color: #ffff00;
-  font-weight: bold;
-}
 
 .terminal-output::-webkit-scrollbar {
   width: 8px;
