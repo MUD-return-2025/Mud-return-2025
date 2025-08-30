@@ -1,6 +1,9 @@
 <template>
-  <div class="game-terminal">
+  <div class="game-terminal" :class="{ fullscreen: isFullscreen }">
     <div class="terminal-output" ref="outputElement">
+      <button @click="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'">
+        {{ isFullscreen ? '⤡' : '⛶' }}
+      </button>
       <div class="welcome-message">
         <p>🏰 Добро пожаловать в Мидгард! 🏰</p>
         <p>Введите "new" для начала новой игры или "load" для загрузки сохранения.</p>
@@ -22,7 +25,8 @@
       />
     </div>
 
-    <PlayerStatsPanel 
+    <PlayerStatsPanel
+      v-if="!isFullscreen"
       :player="player" 
       :game-started="gameStarted"
       :game-engine="gameEngine"
@@ -43,8 +47,14 @@ const currentInput = ref('');
 const gameStarted = ref(false);
 const outputElement = ref(null);
 const inputElement = ref(null);
+const isFullscreen = ref(false);
 
 const player = reactive(gameEngine.player);
+
+const toggleFullscreen = () => {
+  isFullscreen.value = !isFullscreen.value;
+  nextTick(() => inputElement.value?.focus());
+};
 
 // Автоскролл к низу при добавлении сообщений
 const scrollToBottom = () => {
@@ -135,6 +145,21 @@ onMounted(() => {
   background-color: #000;
   border: 2px solid #00ff00;
   font-family: 'Courier New', monospace;
+  position: relative;
+}
+
+.game-terminal.fullscreen {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  z-index: 2000;
+  border: none;
+}
+
+.game-terminal.fullscreen .terminal-output {
+  height: calc(100% - 42px); /* Full height minus input bar */
 }
 
 .terminal-output {
@@ -145,6 +170,31 @@ onMounted(() => {
   color: #00ff00;
   font-size: 14px;
   line-height: 1.4;
+  position: relative;
+}
+
+.fullscreen-btn {
+  position: absolute;
+  top: 5px;
+  right: 5px;
+  background: #002200;
+  border: 1px solid #00ff00;
+  color: #00ff00;
+  cursor: pointer;
+  z-index: 1001;
+  font-size: 18px;
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  padding: 0;
+}
+
+.fullscreen-btn:hover {
+  background-color: #00ff00;
+  color: #000;
 }
 
 .welcome-message {
