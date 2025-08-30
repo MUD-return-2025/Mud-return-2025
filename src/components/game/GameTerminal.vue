@@ -18,6 +18,8 @@
       <input
         v-model="currentInput"
         @keyup.enter="processCommand"
+        @keydown.up.prevent="navigateHistoryUp"
+        @keydown.down.prevent="navigateHistoryDown"
         ref="inputElement"
         placeholder="Введите команду..."
         autocomplete="off"
@@ -43,6 +45,9 @@ const gameEngine = new GameEngine();
 const gameMessages = ref([]);
 const currentInput = ref('');
 const gameStarted = ref(false);
+const commandHistory = ref([]);
+const historyIndex = ref(0);
+let tempInputOnNavStart = '';
 const outputElement = ref(null);
 const inputElement = ref(null);
 const isFullscreen = ref(false);
@@ -52,6 +57,36 @@ const player = reactive(gameEngine.player);
 const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value;
   nextTick(() => inputElement.value?.focus());
+};
+
+/**
+ * Перемещается вверх по истории команд.
+ * @param {KeyboardEvent} e - Событие клавиатуры.
+ */
+const navigateHistoryUp = (e) => {
+  if (commandHistory.value.length === 0) return;
+
+  if (historyIndex.value === commandHistory.value.length) {
+    tempInputOnNavStart = currentInput.value;
+  }
+
+  if (historyIndex.value > 0) {
+    historyIndex.value--;
+    currentInput.value = commandHistory.value[historyIndex.value];
+  }
+};
+
+/**
+ * Перемещается вниз по истории команд.
+ * @param {KeyboardEvent} e - Событие клавиатуры.
+ */
+const navigateHistoryDown = (e) => {
+  if (commandHistory.value.length === 0) return;
+
+  if (historyIndex.value < commandHistory.value.length) {
+    historyIndex.value++;
+    currentInput.value = commandHistory.value[historyIndex.value] ?? tempInputOnNavStart;
+  }
 };
 
 // Автоскролл к низу при добавлении сообщений
@@ -97,6 +132,12 @@ const processCommand = () => {
   const input = currentInput.value.trim();
   if (!input) return;
 
+  // Добавляем команду в историю, если она не дублирует последнюю
+  if (commandHistory.value.length === 0 || commandHistory.value[commandHistory.value.length - 1] !== input) {
+    commandHistory.value.push(input);
+  }
+  historyIndex.value = commandHistory.value.length;
+
   if (!gameStarted.value) {
     if (input.toLowerCase() === 'new') {
       const welcomeMsg = gameEngine.startNewGame();
@@ -125,6 +166,7 @@ const processCommand = () => {
 
 onMounted(() => {
   inputElement.value?.focus();
+  historyIndex.value = commandHistory.value.length;
 
   // Автосохранение каждые 30 секунд
   setInterval(() => {
