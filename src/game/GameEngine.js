@@ -1,0 +1,614 @@
+
+import { Player } from './classes/Player.js';
+import { Room } from './classes/Room.js';
+import { NPC } from './classes/NPC.js';
+import { CommandParser } from './classes/CommandParser.js';
+import { rooms } from './data/rooms.js';
+import { items } from './data/items.js';
+import { npcs } from './data/npcs.js';
+
+/**
+ * Основной игровой движок
+ * Управляет состоянием игры, обработкой команд и игровой логикой
+ */
+export class GameEngine {
+  constructor() {
+    this.player = new Player();
+    this.rooms = new Map();
+    this.npcs = new Map();
+    this.commandParser = new CommandParser();
+    this.messageHistory = [];
+    this.gameState = 'menu'; // menu, playing, paused
+    this.combatTarget = null; // текущая цель в бою
+    
+    this.initializeWorld();
+    this.registerCommands();
+  }
+
+  /**
+   * Инициализация игрового мира
+   * Создает объекты локаций и НПС из статических данных
+   */
+  initializeWorld() {
+    // Создаем локации
+    for (let [roomId, roomData] of Object.entries(rooms)) {
+      this.rooms.set(roomId, new Room(roomData));
+    }
+    
+    // Создаем НПС
+    for (let [npcId, npcData] of Object.entries(npcs)) {
+      this.npcs.set(npcId, new NPC(npcData));
+    }
+  }
+
+  /**
+   * Регистрирует все игровые команды
+   */
+  registerCommands() {
+    this.commandParser.registerCommand('look', this.cmdLook.bind(this));
+    this.commandParser.registerCommand('go', this.cmdGo.bind(this));
+    this.commandParser.registerCommand('get', this.cmdGet.bind(this));
+    this.commandParser.registerCommand('drop', this.cmdDrop.bind(this));
+    this.commandParser.registerCommand('inventory', this.cmdInventory.bind(this));
+    this.commandParser.registerCommand('kill', this.cmdKill.bind(this));
+    this.commandParser.registerCommand('say', this.cmdSay.bind(this));
+    this.commandParser.registerCommand('use', this.cmdUse.bind(this));
+    this.commandParser.registerCommand('stats', this.cmdStats.bind(this));
+    this.commandParser.registerCommand('help', this.cmdHelp.bind(this));
+    this.commandParser.registerCommand('save', this.cmdSave.bind(this));
+    this.commandParser.registerCommand('load', this.cmdLoad.bind(this));
+    this.commandParser.registerCommand('heal', this.cmdHeal.bind(this));
+  }
+
+  /**
+   * Обрабатывает команду игрока
+   * @param {string} input - текстовый ввод
+   * @returns {string} результат выполнения
+   */
+  processCommand(input) {
+    if (this.player.state === 'dead') {
+      return 'Вы мертвы. Используйте команду "respawn" для возрождения.';
+    }
+
+    const parsed = this.commandParser.parseCommand(input);
+    const result = this.commandParser.executeCommand(parsed, this);
+    
+    // Добавляем команду и результат в историю
+    this.messageHistory.push(`> ${input}`);
+    this.messageHistory.push(result);
+    
+    // Ограничиваем историю сообщений
+    if (this.messageHistory.length > 100) {
+      this.messageHistory = this.messageHistory.slice(-50);
+    }
+    
+    return result;
+  }
+
+  /**
+   * Команда: look - осмотр локации или предмета
+   */
+  cmdLook(cmd) {
+    const currentRoom = this.getCurrentRoom();
+    
+    if (!cmd.target) {
+      // Осматриваем локацию
+      return currentRoom.getFullDescription(this);
+    }
+    
+    // Осматриваем конкретный предмет или НПС
+    const target = cmd.target.toLowerCase();
+    
+    // Ищем среди предметов в комнате
+    const roomItem = currentRoom.items.find(itemId => {
+      const item = this.getItem(itemId);
+      return item && item.name.toLowerCase().includes(target);
+    });
+    
+    if (roomItem) {
+      const item = this.getItem(roomItem);
+      return item.description + (item.readText ? `\n\nНа ${item.name} написано: "${item.readText}"` : '');
+    }
+    
+    // Ищем среди предметов в инвентаре
+    const inventoryItem = this.player.findItem(target);
+    if (inventoryItem) {
+      return inventoryItem.description;
+    }
+    
+    // Ищем среди НПС
+    const npcInRoom = currentRoom.npcs.find(npcId => {
+      const npc = this.getNpc(npcId);
+      return npc && npc.name.toLowerCase().includes(target);
+    });
+    
+    if (npcInRoom) {
+      const npc = this.getNpc(npcInRoom);
+      return npc.description + (npc.hitPoints <= 0 ? ' (мертв)' : '');
+    }
+    
+    return `Вы не видите "${cmd.target}" здесь.`;
+  }
+
+  /**
+   * Команда: go - перемещение между локациями
+   */
+  cmdGo(cmd) {
+    if (!cmd.target) {
+      return 'Куда вы хотите пойти? Используйте: go <направление>';
+    }
+    
+    const currentRoom = this.getCurrentRoom();
+    const direction = cmd.target.toLowerCase();
+    const exitRoomId = currentRoom.getExit(direction);
+    
+    if (!exitRoomId) {
+      return `Вы не можете пойти ${direction} отсюда.`;
+    }
+    
+    if (this.player.state === 'fighting') {
+      return 'Вы не можете уйти во время боя!';
+    }
+    
+    this.player.currentRoom = exitRoomId;
+    const newRoom = this.getCurrentRoom();
+    
+    return `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}`;
+  }
+
+  /**
+   * Команда: get - взять предмет
+   */
+  cmdGet(cmd) {
+    if (!cmd.target) {
+      return 'Что вы хотите взять?';
+    }
+    
+    const currentRoom = this.getCurrentRoom();
+    const target = cmd.target.toLowerCase();
+    
+    // Ищем предмет в локации
+    const itemId = currentRoom.items.find(itemId => {
+      const item = this.getItem(itemId);
+      return item && item.name.toLowerCase().includes(target);
+    });
+    
+    if (!itemId) {
+      return `Вы не видите "${cmd.target}" здесь.`;
+    }
+    
+    const item = this.getItem(itemId);
+    
+    if (!item.canTake) {
+      return `Вы не можете взять ${item.name}.`;
+    }
+    
+    if (!this.player.canCarry(item)) {
+      return `${item.name} слишком тяжелый для вас.`;
+    }
+    
+    // Перемещаем предмет из локации в инвентарь
+    currentRoom.removeItem(itemId);
+    this.player.addItem(item);
+    
+    return `Вы взяли ${item.name}.`;
+  }
+
+  /**
+   * Команда: drop - бросить предмет
+   */
+  cmdDrop(cmd) {
+    if (!cmd.target) {
+      return 'Что вы хотите бросить?';
+    }
+    
+    const item = this.player.findItem(cmd.target);
+    if (!item) {
+      return `У вас нет "${cmd.target}".`;
+    }
+    
+    const currentRoom = this.getCurrentRoom();
+    this.player.removeItem(item.id);
+    currentRoom.addItem(item.id);
+    
+    return `Вы бросили ${item.name}.`;
+  }
+
+  /**
+   * Команда: inventory - показать инвентарь
+   */
+  cmdInventory() {
+    if (this.player.inventory.length === 0) {
+      return 'Ваш инвентарь пуст.';
+    }
+    
+    let result = 'Ваш инвентарь:\n';
+    let totalWeight = 0;
+    
+    this.player.inventory.forEach(item => {
+      result += `  ${item.name}`;
+      if (item.weight) {
+        result += ` (вес: ${item.weight})`;
+        totalWeight += item.weight;
+      }
+      result += '\n';
+    });
+    
+    result += `\nОбщий вес: ${totalWeight}/${this.player.strength * 10}`;
+    return result;
+  }
+
+  /**
+   * Команда: kill - атака
+   */
+  cmdKill(cmd) {
+    if (!cmd.target) {
+      return 'Кого вы хотите атаковать?';
+    }
+    
+    const currentRoom = this.getCurrentRoom();
+    const target = cmd.target.toLowerCase();
+    
+    // Ищем НПС в локации
+    const npcId = currentRoom.npcs.find(npcId => {
+      const npc = this.getNpc(npcId);
+      return npc && npc.name.toLowerCase().includes(target) && npc.isAlive();
+    });
+    
+    if (!npcId) {
+      return `Здесь нет "${cmd.target}" для атаки.`;
+    }
+    
+    const npc = this.getNpc(npcId);
+    
+    if (npc.type === 'friendly') {
+      return `${npc.name} дружелюбен к вам. Вы не можете атаковать.`;
+    }
+    
+    // Начинаем или продолжаем бой
+    this.player.state = 'fighting';
+    this.combatTarget = npcId;
+    
+    return this.performCombatRound();
+  }
+
+  /**
+   * Выполняет раунд боя
+   * @returns {string} результат боевого раунда
+   */
+  performCombatRound() {
+    const npc = this.getNpc(this.combatTarget);
+    let result = '';
+    
+    // Атака игрока
+    const playerDamage = this.calculatePlayerDamage();
+    const npcAlive = npc.takeDamage(playerDamage);
+    
+    result += `Вы наносите ${playerDamage} урона ${npc.name}.\n`;
+    
+    if (!npcAlive) {
+      // НПС умер
+      result += `${npc.name} повержен!\n`;
+      
+      if (npc.experience > 0) {
+        this.player.addExperience(npc.experience);
+        result += `Вы получили ${npc.experience} опыта.\n`;
+      }
+      
+      // Дропы
+      const drops = npc.getDeathDrops();
+      if (drops.length > 0) {
+        const currentRoom = this.getCurrentRoom();
+        drops.forEach(itemId => currentRoom.addItem(itemId));
+        result += `${npc.name} что-то оставил.\n`;
+      }
+      
+      // Убираем НПС из локации
+      this.getCurrentRoom().removeNpc(this.combatTarget);
+      this.player.state = 'idle';
+      this.combatTarget = null;
+      
+    } else {
+      // НПС жив и атакует в ответ
+      const npcDamage = npc.rollDamage();
+      this.player.takeDamage(npcDamage);
+      
+      result += `${npc.name} наносит вам ${npcDamage} урона.\n`;
+      result += `У вас осталось ${this.player.hitPoints}/${this.player.maxHitPoints} HP.`;
+      
+      if (this.player.hitPoints <= 0) {
+        result += '\nВы умерли!';
+        this.player.state = 'dead';
+        this.combatTarget = null;
+      }
+    }
+    
+    return result;
+  }
+
+  /**
+   * Вычисляет урон игрока
+   * @returns {number} урон
+   */
+  calculatePlayerDamage() {
+    let baseDamage = Math.floor(Math.random() * 6) + 1; // 1d6
+    
+    // Бонус от силы
+    const strBonus = Math.floor((this.player.strength - 10) / 2);
+    baseDamage += strBonus;
+    
+    // Бонус от оружия (если есть)
+    const weapon = this.player.inventory.find(item => item.type === 'weapon');
+    if (weapon) {
+      // Простая реализация - добавляем фиксированный бонус
+      baseDamage += 2;
+    }
+    
+    return Math.max(1, baseDamage);
+  }
+
+  /**
+   * Команда: say - разговор с НПС
+   */
+  cmdSay(cmd) {
+    if (!cmd.target) {
+      return 'Что вы хотите сказать?';
+    }
+    
+    const currentRoom = this.getCurrentRoom();
+    let result = `Вы говорите: "${cmd.target}"\n\n`;
+    
+    // Все НПС в локации реагируют
+    const responses = [];
+    currentRoom.npcs.forEach(npcId => {
+      const npc = this.getNpc(npcId);
+      if (npc && npc.isAlive()) {
+        responses.push(npc.speak());
+      }
+    });
+    
+    if (responses.length > 0) {
+      result += responses.join('\n');
+    } else {
+      result += 'Никто не отвечает.';
+    }
+    
+    return result;
+  }
+
+  /**
+   * Команда: use - использование предмета
+   */
+  cmdUse(cmd) {
+    if (!cmd.target) {
+      return 'Что вы хотите использовать?';
+    }
+    
+    const item = this.player.findItem(cmd.target);
+    if (!item) {
+      return `У вас нет "${cmd.target}".`;
+    }
+    
+    // Обработка зелий
+    if (item.type === 'potion' && item.healAmount) {
+      const healed = this.player.heal(item.healAmount);
+      this.player.removeItem(item.id);
+      return `Вы выпили ${item.name}. Восстановлено ${healed} HP.`;
+    }
+    
+    return `Вы не знаете, как использовать ${item.name}.`;
+  }
+
+  /**
+   * Команда: stats - показать характеристики игрока
+   */
+  cmdStats() {
+    const p = this.player;
+    return `=== Характеристики ===
+Имя: ${p.name}
+Уровень: ${p.level}
+Опыт: ${p.experience}/${p.experienceToNext}
+Здоровье: ${p.hitPoints}/${p.maxHitPoints}
+
+Сила: ${p.strength}
+Ловкость: ${p.dexterity}
+Телосложение: ${p.constitution}
+Интеллект: ${p.intelligence}
+Мудрость: ${p.wisdom}
+Харизма: ${p.charisma}
+
+Состояние: ${p.state === 'fighting' ? 'в бою' : p.state === 'dead' ? 'мертв' : 'готов'}`;
+  }
+
+  /**
+   * Команда: help - справка
+   */
+  cmdHelp() {
+    return `=== СПРАВКА ===
+Основные команды:
+• look (l) - осмотреться вокруг
+• look <предмет/НПС> - осмотреть что-то конкретное
+• go <направление> - идти в указанном направлении (север/юг/восток/запад)
+• get <предмет> - взять предмет
+• drop <предмет> - бросить предмет
+• inventory (inv) - показать инвентарь
+• stats - показать характеристики
+• kill <цель> - атаковать цель
+• say <сообщение> - поговорить с НПС
+• use <предмет> - использовать предмет
+• save - сохранить игру
+• load - загрузить игру
+• help - эта справка
+
+Сокращения:
+• л - look
+• север/с - go north
+• юг/ю - go south  
+• восток/в - go east
+• запад/з - go west`;
+  }
+
+  /**
+   * Команда: save - сохранение игры
+   */
+  cmdSave() {
+    try {
+      this.saveGame();
+      return 'Игра сохранена.';
+    } catch (error) {
+      return 'Ошибка сохранения игры.';
+    }
+  }
+
+  /**
+   * Команда: load - загрузка игры
+   */
+  cmdLoad() {
+    try {
+      const loaded = this.loadGame();
+      if (loaded) {
+        const currentRoom = this.getCurrentRoom();
+        return `Игра загружена.\n\n${currentRoom.getFullDescription(this)}`;
+      } else {
+        return 'Сохранение не найдено.';
+      }
+    } catch (error) {
+      return 'Ошибка загрузки игры.';
+    }
+  }
+
+  /**
+   * Команда: heal - исцеление у жреца
+   */
+  cmdHeal() {
+    const currentRoom = this.getCurrentRoom();
+    const priest = currentRoom.npcs.find(npcId => {
+      const npc = this.getNpc(npcId);
+      return npc && npc.canHeal;
+    });
+    
+    if (!priest) {
+      return 'Здесь нет никого, кто мог бы вас исцелить.';
+    }
+    
+    if (this.player.hitPoints >= this.player.maxHitPoints) {
+      return 'Вы полностью здоровы.';
+    }
+    
+    this.player.hitPoints = this.player.maxHitPoints;
+    return 'Жрец исцелил ваши раны. Вы полностью здоровы.';
+  }
+
+  // Вспомогательные методы
+
+  /**
+   * Получает текущую локацию игрока
+   * @returns {Room} объект локации
+   */
+  getCurrentRoom() {
+    return this.rooms.get(this.player.currentRoom);
+  }
+
+  /**
+   * Получает предмет по ID
+   * @param {string} itemId - ID предмета
+   * @returns {Object|null} данные предмета
+   */
+  getItem(itemId) {
+    return items[itemId] || null;
+  }
+
+  /**
+   * Получает НПС по ID
+   * @param {string} npcId - ID НПС
+   * @returns {NPC|null} объект НПС
+   */
+  getNpc(npcId) {
+    return this.npcs.get(npcId) || null;
+  }
+
+  /**
+   * Сохранение игры в localStorage
+   */
+  saveGame() {
+    const gameData = {
+      player: {
+        name: this.player.name,
+        level: this.player.level,
+        experience: this.player.experience,
+        experienceToNext: this.player.experienceToNext,
+        hitPoints: this.player.hitPoints,
+        maxHitPoints: this.player.maxHitPoints,
+        strength: this.player.strength,
+        dexterity: this.player.dexterity,
+        constitution: this.player.constitution,
+        intelligence: this.player.intelligence,
+        wisdom: this.player.wisdom,
+        charisma: this.player.charisma,
+        inventory: this.player.inventory,
+        currentRoom: this.player.currentRoom,
+        state: this.player.state
+      },
+      rooms: Object.fromEntries(this.rooms),
+      npcs: Object.fromEntries(this.npcs),
+      timestamp: Date.now()
+    };
+    
+    localStorage.setItem('mudgame_save', JSON.stringify(gameData));
+  }
+
+  /**
+   * Загрузка игры из localStorage
+   * @returns {boolean} успешна ли загрузка
+   */
+  loadGame() {
+    const saveData = localStorage.getItem('mudgame_save');
+    if (!saveData) {
+      return false;
+    }
+    
+    try {
+      const gameData = JSON.parse(saveData);
+      
+      // Загружаем данные игрока
+      this.player.load(gameData.player);
+      
+      // Восстанавливаем состояние локаций и НПС (если есть изменения)
+      // В простой реализации можем пропустить, но для полноты добавим базовую поддержку
+      
+      return true;
+    } catch (error) {
+      console.error('Ошибка загрузки:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Начинает новую игру
+   */
+  startNewGame(playerName = 'Игрок') {
+    this.player = new Player(playerName);
+    this.gameState = 'playing';
+    
+    // Начинаем в центре города
+    this.player.currentRoom = 'center';
+    
+    const welcomeMessage = `Добро пожаловать в Мидгард, ${playerName}!
+
+${this.getCurrentRoom().getFullDescription(this)}
+
+Введите 'help' для получения списка команд.`;
+
+    this.messageHistory = [welcomeMessage];
+    return welcomeMessage;
+  }
+
+  /**
+   * Получает последние сообщения
+   * @param {number} count - количество сообщений
+   * @returns {Array<string>} массив сообщений
+   */
+  getRecentMessages(count = 10) {
+    return this.messageHistory.slice(-count);
+  }
+}
