@@ -1,0 +1,160 @@
+{
+  "id": "high_tower",
+  "name": "Высокая башня",
+  "description": "Древняя башня, уходящая в облака. Говорят, на ее вершине обитает могущественный маг.",
+  "items": {
+    "magic_staff": {
+      "name": "магический посох",
+      "description": "Длинный деревянный посох с кристаллом на навершии, который слабо пульсирует энергией.",
+      "type": "weapon",
+      "damage": "1d8",
+      "weight": 2,
+      "value": 150,
+      "canTake": true
+    },
+    "mana_potion": {
+      "name": "зелье маны",
+      "description": "Бутылочка с лазурной жидкостью, восстанавливающей магическую энергию.",
+      "type": "potion",
+      "effect": "restore_mana",
+      "amount": 20,
+      "weight": 1,
+      "value": 50,
+      "canTake": true
+    },
+    "old_scroll": {
+      "name": "старый свиток",
+      "description": "Хрупкий пергамент, покрытый непонятными символами.",
+      "type": "misc",
+      "readText": "Символы слишком сложны для понимания, но вы чувствуете исходящую от них магическую ауру.",
+      "weight": 1,
+      "value": 75,
+      "canTake": true
+    },
+    "golem_heart": {
+      "name": "сердце голема",
+      "description": "Светящийся камень, который когда-то был ядром каменного голема.",
+      "type": "misc",
+      "weight": 5,
+      "value": 200,
+      "canTake": true
+    },
+    "wizard_robe": {
+      "name": "мантия волшебника",
+      "description": "Длинная мантия из темной ткани, расшитая серебряными рунами.",
+      "type": "armor",
+      "armor": 3,
+      "weight": 4,
+      "value": 250,
+      "canTake": true
+    }
+  },
+  "npcs": {
+    "tower_guardian": {
+      "name": "страж башни",
+      "description": "Высокий воин в старинных доспехах. Он неподвижно стоит у входа, преграждая путь.",
+      "type": "neutral",
+      "hitPoints": 80,
+      "maxHitPoints": 80,
+      "damage": "2d6",
+      "experience": 100,
+      "dialogue": [
+        "Только достойные могут войти.",
+        "Докажи свою силу или уходи.",
+        "Многие пытались, но никто не вернулся с вершины."
+      ]
+    },
+    "stone_gargoyle": {
+      "name": "каменная горгулья",
+      "description": "Каменное изваяние с крыльями, которое внезапно оживает, когда вы приближаетесь.",
+      "type": "hostile",
+      "hitPoints": 40,
+      "maxHitPoints": 40,
+      "damage": "1d10",
+      "experience": 75,
+      "drops": ["golem_heart"]
+    },
+    "magic_elemental": {
+      "name": "магический элементаль",
+      "description": "Вихрь чистой энергии, принявший гуманоидную форму. Он потрескивает от нестабильной магии.",
+      "type": "hostile",
+      "hitPoints": 30,
+      "maxHitPoints": 30,
+      "damage": "2d8",
+      "experience": 90,
+      "drops": []
+    },
+    "animated_armor": {
+      "name": "ожившие доспехи",
+      "description": "Пустой комплект рыцарских доспехов, который движется сам по себе, сжимая в руках ржавый меч.",
+      "type": "hostile",
+      "hitPoints": 50,
+      "maxHitPoints": 50,
+      "damage": "1d12",
+      "experience": 120,
+      "drops": []
+    },
+    "crazed_apprentice": {
+      "name": "обезумевший ученик",
+      "description": "Молодой маг с безумным взглядом, бормочущий себе под нос заклинания.",
+      "type": "hostile",
+      "hitPoints": 25,
+      "maxHitPoints": 25,
+      "damage": "3d4",
+      "experience": 60,
+      "drops": ["mana_potion"]
+    },
+    "archmage": {
+      "name": "архимаг",
+      "description": "Могущественный волшебник в развевающейся мантии, стоящий в центре пентаграммы. Его глаза светятся силой.",
+      "type": "hostile",
+      "hitPoints": 150,
+      "maxHitPoints": 150,
+      "damage": "3d8",
+      "experience": 500,
+      "drops": ["wizard_robe"]
+    }
+  },
+  "rooms": {
+    "entrance": {
+      "name": "Вход в башню",
+      "description": "Огромные каменные двери ведут в просторный, тускло освещенный зал. Воздух здесь холодный и пахнет озоном.",
+      "map": { "x": 0, "y": 4 },
+      "exits": { "вверх": "hall", "наружу": { "area": "wildlands", "room": "tower_base" } },
+      "items": [],
+      "npcs": ["tower_guardian"]
+    },
+    "hall": {
+      "name": "Просторный зал",
+      "description": "Высокие своды теряются во тьме наверху. Вдоль стен стоят статуи воинов прошлого. Одна из них выглядит подозрительно.",
+      "map": { "x": 0, "y": 3 },
+      "exits": { "вниз": "entrance", "вверх": "library" },
+      "items": ["magic_staff"],
+      "npcs": ["stone_gargoyle"]
+    },
+    "library": {
+      "name": "Библиотека",
+      "description": "Бесчисленные полки с книгами уходят под самый потолок. В воздухе витает пыль и запах старой бумаги.",
+      "map": { "x": 0, "y": 2 },
+      "exits": { "вниз": "hall", "вверх": "laboratory" },
+      "items": ["old_scroll"],
+      "npcs": ["magic_elemental"]
+    },
+    "laboratory": {
+      "name": "Лаборатория алхимика",
+      "description": "Столы заставлены колбами с кипящими жидкостями всех цветов. В углу стоит пустой комплект доспехов.",
+      "map": { "x": 0, "y": 1 },
+      "exits": { "вниз": "library", "вверх": "summit" },
+      "items": ["mana_potion"],
+      "npcs": ["animated_armor", "crazed_apprentice"]
+    },
+    "summit": {
+      "name": "Вершина башни",
+      "description": "Верхняя площадка башни открыта всем ветрам. В центре начертана светящаяся пентаграмма, в которой стоит могущественная фигура.",
+      "map": { "x": 0, "y": 0 },
+      "exits": { "вниз": "laboratory" },
+      "items": ["wizard_robe"],
+      "npcs": ["archmage"]
+    }
+  }
+}
