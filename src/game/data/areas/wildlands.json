@@ -30,6 +30,7 @@
     "road_to_midgard": {
       "name": "Дорога к Мидгарду",
       "description": "Пыльная дорога, ведущая к великому городу. Вдалеке видны его стены.",
+      "map": { "x": 0, "y": 0 },
       "exits": {
         "в город": { "area": "midgard", "room": "north_gate" },
         "вглубь земель": "wolf_clearing"
@@ -40,6 +41,7 @@
     "wolf_clearing": {
       "name": "Волчья поляна",
       "description": "Открытая поляна, усеянная костями. Похоже, это охотничьи угодья хищников.",
+      "map": { "x": 1, "y": 0 },
       "exits": { "на дорогу": "road_to_midgard" },
       "items": ["sharp_stone"],
       "npcs": ["wolf"]

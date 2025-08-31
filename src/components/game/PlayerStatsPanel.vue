@@ -141,6 +141,54 @@ const currentAreaId = computed(() => currentRoomIds.value[0]);
 const currentLocalRoomId = computed(() => currentRoomIds.value[1]);
 
 /**
+ * @description Вычисляемое свойство, возвращающее список комнат в текущей игровой зоне.
+ * @type {import('vue').ComputedRef<import('../../game/classes/Room').Room[]>}
+ */
+const roomsInCurrentArea = computed(() => {
+  if (!currentAreaId.value || !props.gameEngine.rooms.size) return [];
+  
+  const rooms = [];
+  for (const room of props.gameEngine.rooms.values()) {
+    if (room.area === currentAreaId.value && room.map) {
+      rooms.push(room);
+    }
+  }
+  return rooms;
+});
+
+/**
+ * @description Вычисляет размеры сетки для миникарты на основе координат комнат.
+ */
+const mapDimensions = computed(() => {
+  if (roomsInCurrentArea.value.length === 0) return { cols: 1, rows: 1 };
+  const rooms = roomsInCurrentArea.value;
+  const maxX = Math.max(0, ...rooms.map(r => r.map.x));
+  const maxY = Math.max(0, ...rooms.map(r => r.map.y));
+  return { cols: maxX + 1, rows: maxY + 1 };
+});
+
+/**
+ * @description Вычисляемое свойство для получения списка выходов в другие зоны.
+ * @returns {Array<{direction: string, targetAreaName: string}>}
+ */
+const interZoneExits = computed(() => {
+  if (!currentRoom.value) return [];
+  const exits = [];
+  // Итерируемся по карте выходов текущей комнаты
+  for (const [direction, exitData] of currentRoom.value.exits.entries()) {
+    // Межзоновый выход - это объект, а не строка
+    if (typeof exitData === 'object' && exitData.area) {
+      const area = props.gameEngine.areas.get(exitData.area);
+      exits.push({
+        direction,
+        targetAreaName: area ? area.name : exitData.area,
+      });
+    }
+  }
+  return exits;
+});
+
+/**
  * Проверяет, доступна ли комната для посещения из текущей.
  * @param {string} localRoomId - Локальный ID комнаты.
  * @returns {boolean} true, если комната доступна.
@@ -381,94 +429,46 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
         </div>
 
         <!-- Вкладка "Мини-карта" -->
-        <!-- ВНИМАНИЕ: Текущая реализация карты жестко закодирована для зоны "Мидгард". -->
         <div v-if="activeTab === 'map'" class="map-tab-content">
           <div class="minimap">
-            <div class="minimap-grid">
-              <!-- Северные ворота -->
+            <div 
+              class="minimap-grid"
+              :style="{ 
+                'grid-template-columns': `repeat(${mapDimensions.cols}, 1fr)`,
+                'grid-template-rows': `repeat(${mapDimensions.rows}, auto)`
+              }"
+            >
+              <!-- Динамическая генерация комнат -->
               <div 
+                v-for="room in roomsInCurrentArea"
+                :key="room.id"
                 class="map-room" 
                 :class="{ 
-                  active: currentLocalRoomId === 'north_gate' && currentAreaId === 'midgard',
-                  available: isRoomAvailable('north_gate'),
-                  clickable: isRoomClickable('north_gate')
+                  active: currentLocalRoomId === room.id,
+                  available: isRoomAvailable(room.id),
+                  clickable: isRoomClickable(room.id)
                 }" 
-                style="grid-column: 2; grid-row: 1;"
-                @click="moveToRoom('north_gate')"
+                :style="{ 'grid-column': room.map.x + 1, 'grid-row': room.map.y + 1 }"
+                @click="moveToRoom(room.id)"
               >
-                <div class="room-name">Северные ворота</div>
-              </div>
-
-              <!-- Центральная площадь -->
-              <div 
-                class="map-room" 
-                :class="{ 
-                  active: currentLocalRoomId === 'center' && currentAreaId === 'midgard',
-                  available: isRoomAvailable('center'),
-                  clickable: isRoomClickable('center')
-                }" 
-                style="grid-column: 2; grid-row: 2;"
-                @click="moveToRoom('center')"
-              >
-                <div class="room-name">Центр</div>
-              </div>
-
-              <!-- Восточный квартал -->
-              <div 
-                class="map-room" 
-                :class="{ 
-                  active: currentLocalRoomId === 'east_quarter' && currentAreaId === 'midgard',
-                  available: isRoomAvailable('east_quarter'),
-                  clickable: isRoomClickable('east_quarter')
-                }" 
-                style="grid-column: 3; grid-row: 2;"
-                @click="moveToRoom('east_quarter')"
-              >
-                <div class="room-name">Восточный квартал</div>
-              </div>
-
-              <!-- Западный квартал -->
-              <div 
-                class="map-room" 
-                :class="{ 
-                  active: currentLocalRoomId === 'west_quarter' && currentAreaId === 'midgard',
-                  available: isRoomAvailable('west_quarter'),
-                  clickable: isRoomClickable('west_quarter')
-                }" 
-                style="grid-column: 1; grid-row: 2;"
-                @click="moveToRoom('west_quarter')"
-              >
-                <div class="room-name">Западный квартал</div>
-              </div>
-
-              <!-- Южные ворота -->
-              <div 
-                class="map-room" 
-                :class="{ 
-                  active: currentLocalRoomId === 'south_gate' && currentAreaId === 'midgard',
-                  available: isRoomAvailable('south_gate'),
-                  clickable: isRoomClickable('south_gate')
-                }" 
-                style="grid-column: 2; grid-row: 3;"
-                @click="moveToRoom('south_gate')"
-              >
-                <div class="room-name">Южные ворота</div>
-              </div>
-
-              <!-- Храм -->
-              <div 
-                class="map-room" 
-                :class="{ 
-                  active: currentLocalRoomId === 'temple' && currentAreaId === 'midgard',
-                  available: isRoomAvailable('temple'),
-                  clickable: isRoomClickable('temple')
-                }" 
-                style="grid-column: 2; grid-row: 4;"
-                @click="moveToRoom('temple')"
-              >
-                <div class="room-name">Храм</div>
+                <div class="room-name">{{ room.name }}</div>
               </div>
             </div>
+
+            <!-- Блок для межзоновых переходов -->
+            <div v-if="interZoneExits.length > 0" class="map-portals">
+              <h4>Порталы в другие зоны</h4>
+              <div class="portal-buttons">
+                <button 
+                  v-for="exit in interZoneExits" 
+                  :key="exit.direction"
+                  @click="$emit('command', 'go ' + exit.direction)"
+                >
+                  {{ exit.direction }} (в {{ exit.targetAreaName }})
+                </button>
+              </div>
+            </div>
+
             <div class="map-legend">
               <div class="legend-item">
                 <span class="legend-color current"></span>

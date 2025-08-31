@@ -20,6 +20,7 @@ export class Room {
     this.area = roomData.area;
     this.name = roomData.name;
     this.description = roomData.description;
+    this.map = roomData.map; // Координаты комнаты на карте {x, y}
     this.exits = new Map(Object.entries(roomData.exits || {}));
     // Создаем изменяемые копии массивов, чтобы не мутировать исходные данные из JSON
     this.items = [...(roomData.items || [])];
