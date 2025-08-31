@@ -42,32 +42,49 @@ import { ref, reactive, onMounted, nextTick, watch } from 'vue';
 import { GameEngine } from '../../game/GameEngine.js';
 import PlayerStatsPanel from './PlayerStatsPanel.vue';
 
+// --- Состояние компонента ---
+
+/** @type {GameEngine} Экземпляр игрового движка. */
 const gameEngine = new GameEngine();
+/** @type {import('vue').Ref<string[]>} Массив сообщений для вывода в терминал. */
 const gameMessages = ref([]);
+/** @type {import('vue').Ref<string>} Текущий текст в поле ввода. */
 const currentInput = ref('');
+/** @type {import('vue').Ref<boolean>} Флаг, указывающий, началась ли игра. */
 const gameStarted = ref(false);
+/** @type {import('vue').Ref<string[]>} История введенных команд. */
 const commandHistory = ref([]);
+/** @type {import('vue').Ref<number>} Текущий индекс в истории команд для навигации. */
 const historyIndex = ref(0);
+/** @type {string} Временное хранилище для текста в поле ввода при навигации по истории. */
 let tempInputOnNavStart = '';
+/** @type {import('vue').Ref<number>} Счетчик обновлений для принудительной перерисовки дочерних компонентов. */
 const updateCounter = ref(0);
+/** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент вывода терминала. */
 const outputElement = ref(null);
+/** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент поля ввода. */
 const inputElement = ref(null);
+/** @type {import('vue').Ref<boolean>} Флаг полноэкранного режима. */
 const isFullscreen = ref(false);
 
+/** @type {import('../../game/classes/Player').Player} Реактивный объект игрока. */
 const player = reactive(gameEngine.player);
 
+/**
+ * Переключает полноэкранный режим терминала.
+ */
 const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value;
+  // Возвращаем фокус на поле ввода после изменения DOM
   nextTick(() => inputElement.value?.focus());
 };
 
 /**
- * Перемещается вверх по истории команд.
- * @param {KeyboardEvent} e - Событие клавиатуры.
+ * Перемещается вверх по истории команд при нажатии стрелки вверх.
  */
 const navigateHistoryUp = (e) => {
   if (commandHistory.value.length === 0) return;
-
+  // Сохраняем текущий ввод, если мы начинаем навигацию с конца истории
   if (historyIndex.value === commandHistory.value.length) {
     tempInputOnNavStart = currentInput.value;
   }
@@ -79,8 +96,7 @@ const navigateHistoryUp = (e) => {
 };
 
 /**
- * Перемещается вниз по истории команд.
- * @param {KeyboardEvent} e - Событие клавиатуры.
+ * Перемещается вниз по истории команд при нажатии стрелки вниз.
  */
 const navigateHistoryDown = (e) => {
   if (commandHistory.value.length === 0) return;
@@ -91,7 +107,10 @@ const navigateHistoryDown = (e) => {
   }
 };
 
-// Автоскролл к низу при добавлении сообщений
+/**
+ * Прокручивает вывод терминала вниз.
+ * Вызывается при обновлении `gameMessages`.
+ */
 const scrollToBottom = () => {
   nextTick(() => {
     if (outputElement.value) {
@@ -100,52 +119,69 @@ const scrollToBottom = () => {
   });
 };
 
+// Отслеживаем изменения в `gameMessages` для автопрокрутки.
 watch(gameMessages, scrollToBottom, { deep: true });
 
-const executeCommand = (command) => {
+/**
+ * Выполняет команду, отправленную из дочернего компонента (например, PlayerStatsPanel).
+ * @param {string} command - Команда для выполнения.
+ */
+const executeCommand = async (command) => {
   if (!gameStarted.value) return;
   
   gameMessages.value.push(` `);
   if (command) gameMessages.value.push(`> ${command}`);
-  const result = gameEngine.processCommand(command);
+  const result = await gameEngine.processCommand(command);
   if (result) gameMessages.value.push(...result.split('\n'));
 
-  // Автосохранение каждые несколько команд
+  // Автосохранение каждые несколько команд для удобства.
   if (gameMessages.value.length % 10 === 0) {
     gameEngine.saveGame();
   }
 };
 
+/**
+ * Обрабатывает событие перемещения игрока, инициированное из PlayerStatsPanel.
+ * @param {string} message - Сообщение о результате перемещения.
+ */
 const handleMove = (message) => {
   if (!gameStarted.value) return;
   
   gameMessages.value.push(message);
   
-  // Автосохранение
+  // Автосохранение после каждого перемещения.
   gameEngine.saveGame();
 };
 
-const processCommand = () => {
+/**
+ * Обрабатывает ввод команды в терминале.
+ * Это основная функция взаимодействия игрока с игрой.
+ */
+const processCommand = async () => {
   const input = currentInput.value.trim();
   if (!input) return;
 
-  // Добавляем команду в историю, если она не дублирует последнюю
+  // Добавляем команду в историю, если она не дублирует последнюю.
   if (commandHistory.value.length === 0 || commandHistory.value[commandHistory.value.length - 1] !== input) {
     commandHistory.value.push(input);
   }
+  // Сбрасываем индекс истории, чтобы при следующем нажатии "вверх" показалась последняя команда.
   historyIndex.value = commandHistory.value.length;
 
   if (!gameStarted.value) {
+    // Обработка команд до начала игры (new/load)
     if (input.toLowerCase() === 'new') {
-      const welcomeMsg = gameEngine.startNewGame();
+      const welcomeMsg = await gameEngine.startNewGame();
       gameMessages.value = welcomeMsg.split('\n');
       gameStarted.value = true;
       Object.assign(player, gameEngine.player);
     } else if (input.toLowerCase() === 'load') {
-      if (gameEngine.loadGame()) {
+      const loaded = await gameEngine.loadGame();
+      if (loaded) {
         gameMessages.value.push('Игра загружена!');
         const currentRoom = gameEngine.getCurrentRoom();
-        gameMessages.value.push('', currentRoom.getFullDescription(gameEngine));
+        const [areaId] = gameEngine._parseGlobalId(player.currentRoom);
+        gameMessages.value.push('', currentRoom.getFullDescription(gameEngine, areaId));
         gameStarted.value = true;
         Object.assign(player, gameEngine.player);
       } else {
@@ -155,23 +191,28 @@ const processCommand = () => {
       gameMessages.value.push('Используйте "new" для новой игры или "load" для загрузки.');
     }
   } else {
-    executeCommand(input);
+    // Обработка игровых команд
+    await executeCommand(input);
   }
 
   currentInput.value = '';
 };
 
 onMounted(() => {
+  // Фокусируемся на поле ввода при загрузке компонента.
   inputElement.value?.focus();
   historyIndex.value = commandHistory.value.length;
 
+  // Подписываемся на событие 'update' от игрового движка.
+  // Это позволяет UI реагировать на изменения состояния игрока (HP, статы и т.д.).
   gameEngine.on('update', () => {
-    // Обновляем реактивный объект игрока, чтобы UI (панель статистики) перерисовался
+    // Обновляем реактивный объект игрока, чтобы UI (панель статистики) перерисовался.
     Object.assign(player, gameEngine.player);
+    // Увеличиваем счетчик, чтобы дочерние компоненты (PlayerStatsPanel) тоже обновились.
     updateCounter.value++;
   });
 
-  // NEW: Listen for async messages from the engine (e.g., combat rounds)
+  // Подписываемся на асинхронные сообщения от движка (например, раунды боя).
   gameEngine.on('message', (message) => {
     if (message) {
       gameMessages.value.push(...message.split('\n'));
@@ -179,16 +220,16 @@ onMounted(() => {
   });
 
   let tickCount = 0;
-  // Основной игровой цикл, запускается каждую секунду
+  // Основной игровой цикл (тикер), запускается каждую секунду.
   setInterval(() => {
     if (gameStarted.value) {
-      // 1. Обрабатываем асинхронные события движка (например, респавн)
+      // 1. Обрабатываем асинхронные события движка (например, респавн NPC, блуждание).
       const tickMessages = gameEngine.update();
       if (tickMessages.length > 0) {
         gameMessages.value.push(...tickMessages);
       }
 
-      // 2. Автосохранение каждые 30 секунд
+      // 2. Автосохранение каждые 30 секунд.
       tickCount++;
       if (tickCount >= 30) {
         gameEngine.saveGame();

@@ -1,15 +1,25 @@
 
 /**
- * Класс игрока
- * Содержит все характеристики, инвентарь и методы игрока
+ * Представляет игрока, управляя его состоянием, характеристиками,
+ * инвентарем и действиями в игровом мире.
  */
 export class Player {
+  /**
+   * Создает экземпляр игрока.
+   * @param {string} [name='Игрок'] - Имя игрока.
+   */
   constructor(name = 'Игрок') {
+    /** @type {string} Имя игрока. */
     this.name = name;
+    /** @type {number} Текущий уровень. */
     this.level = 1;
+    /** @type {number} Текущее количество опыта. */
     this.experience = 0;
+    /** @type {number} Опыта до следующего уровня. */
     this.experienceToNext = 100;
+    /** @type {number} Текущее здоровье. */
     this.hitPoints = 20;
+    /** @type {number} Максимальное здоровье. */
     this.maxHitPoints = 20;
     
     // Базовые характеристики
@@ -20,17 +30,22 @@ export class Player {
     this.wisdom = 10;
     this.charisma = 10;
     
+    /** @type {object[]} Инвентарь игрока. */
     this.inventory = [];
+    /** @type {string} Глобальный ID текущей комнаты. */
     this.currentRoom = 'center';
-    this.state = 'idle'; // idle, fighting, dead
-    this.target = null; // текущая цель в бою
-    this.equippedWeapon = null; // экипированное оружие
-    this.equippedArmor = null; // экипированная броня
+    /** @type {'idle'|'fighting'|'dead'} Текущее состояние игрока. */
+    this.state = 'idle';
+    /** @type {object|null} Экипированное оружие. */
+    this.equippedWeapon = null;
+    /** @type {object|null} Экипированная броня. */
+    this.equippedArmor = null;
   }
 
   /**
-   * Добавляет опыт игроку и проверяет повышение уровня
-   * @param {number} exp - количество опыта
+   * Добавляет опыт игроку и проверяет, достиг ли он нового уровня.
+   * @param {number} exp - Количество получаемого опыта.
+   * @returns {{message: string, statIncreased: string}|null} Объект с сообщением о повышении уровня или null.
    */
   addExperience(exp) {
     this.experience += exp;
@@ -38,12 +53,14 @@ export class Player {
     
     while (this.experience >= this.experienceToNext) {
       levelUpInfo = this.levelUp(); // Capture the last level up info
+      // Сохраняем информацию о последнем повышении уровня, если их было несколько за раз.
     }
-    return levelUpInfo; // Return it
+    return levelUpInfo;
   }
 
   /**
-   * Повышение уровня игрока
+   * Повышает уровень игрока, обновляя его характеристики и здоровье.
+   * @returns {{message: string, statIncreased: string}} Объект с информацией о повышении уровня.
    */
   levelUp() {
     this.level++;
@@ -51,7 +68,7 @@ export class Player {
     this.experienceToNext = this.level * 100; // прогрессия опыта
     
     // Увеличиваем HP и случайную характеристику
-    this.maxHitPoints += 5;
+    this.maxHitPoints += 5; // Бонус к здоровью за уровень
     this.hitPoints = this.maxHitPoints; // полное исцеление при левелапе
     
     // Случайное улучшение характеристики
@@ -66,8 +83,9 @@ export class Player {
   }
 
   /**
-   * Исцеляет игрока на указанное количество HP
-   * @param {number} amount - количество HP для исцеления
+   * Восстанавливает здоровье игрока.
+   * @param {number} amount - Количество HP для восстановления.
+   * @returns {number} Фактически восстановленное количество здоровья.
    */
   heal(amount) {
     const oldHp = this.hitPoints;
@@ -76,8 +94,9 @@ export class Player {
   }
 
   /**
-   * Наносит урон игроку
-   * @param {number} damage - количество урона
+   * Уменьшает здоровье игрока на указанное количество урона.
+   * @param {number} damage - Количество получаемого урона.
+   * @returns {number} Оставшееся здоровье.
    */
   takeDamage(damage) {
     this.hitPoints = Math.max(0, this.hitPoints - damage);
@@ -88,19 +107,20 @@ export class Player {
   }
 
   /**
-   * Добавляет предмет в инвентарь
-   * @param {Object} item - предмет для добавления
+   * Добавляет предмет в инвентарь игрока.
+   * @param {object} item - Объект предмета для добавления.
    */
   addItem(item) {
     this.inventory.push(item);
   }
 
   /**
-   * Удаляет предмет из инвентаря
-   * @param {string} itemId - ID предмета
+   * Удаляет предмет из инвентаря по его глобальному ID.
+   * @param {string} globalId - Глобальный ID предмета.
+   * @returns {object|null} Удаленный предмет или null, если предмет не найден.
    */
-  removeItem(itemId) {
-    const index = this.inventory.findIndex(item => item.id === itemId);
+  removeItem(globalId) {
+    const index = this.inventory.findIndex(item => item.globalId === globalId);
     if (index !== -1) {
       return this.inventory.splice(index, 1)[0];
     }
@@ -108,19 +128,21 @@ export class Player {
   }
 
   /**
-   * Находит предмет в инвентаре
-   * @param {string} itemName - название предмета (может быть частичным)
+   * Находит предмет в инвентаре по его имени или ID.
+   * @param {string} itemName - Название или ID предмета для поиска (может быть частичным).
+   * @returns {object|undefined} Найденный предмет или undefined.
    */
   findItem(itemName) {
     const searchName = itemName.toLowerCase();
     return this.inventory.find(item => 
       item.name.toLowerCase().includes(searchName) ||
-      item.id.toLowerCase().includes(searchName)
+      (item.globalId && item.globalId.toLowerCase().includes(searchName))
     );
   }
 
   /**
-   * Сохранение игрока в localStorage
+   * Сохраняет состояние игрока.
+   * @deprecated Этот метод не используется, так как сохранение управляется `GameEngine`.
    */
   save() {
     const playerData = {
@@ -145,26 +167,28 @@ export class Player {
   }
 
   /**
-   * Загрузка игрока из localStorage
-   * @param {Object} data - данные для загрузки
+   * Загружает состояние игрока из предоставленного объекта данных.
+   * @param {object} data - Данные для загрузки.
    */
   load(data) {
     Object.assign(this, data);
   }
 
   /**
-   * Получает общий вес инвентаря
+   * Рассчитывает общий вес всех предметов в инвентаре.
+   * @returns {number} Общий вес.
    */
   getTotalWeight() {
     return this.inventory.reduce((total, item) => total + (item.weight || 0), 0);
   }
 
   /**
-   * Проверяет, может ли игрок нести еще один предмет
-   * @param {Object} item - предмет для проверки
+   * Проверяет, может ли игрок взять еще один предмет, не превысив максимальный вес.
+   * @param {object} item - Предмет для проверки.
+   * @returns {boolean} `true`, если игрок может нести предмет.
    */
   canCarry(item) {
-    const maxWeight = this.strength * 10; // максимальный вес = сила * 10
+    const maxWeight = this.strength * 10; // Максимальный вес = сила * 10
     return this.getTotalWeight() + (item.weight || 0) <= maxWeight;
   }
 
@@ -178,6 +202,7 @@ export class Player {
       return `${weapon.name} не является оружием.`;
     }
 
+    // Если уже есть экипированное оружие, возвращаем его в инвентарь.
     let result = '';
     if (this.equippedWeapon) {
       this.addItem(this.equippedWeapon);
@@ -185,7 +210,8 @@ export class Player {
     }
 
     this.equippedWeapon = weapon;
-    this.removeItem(weapon.id);
+    // Удаляем новое оружие из инвентаря, так как оно теперь экипировано.
+    this.removeItem(weapon.globalId);
     result += `Вы экипировали ${weapon.name}.`;
     return result;
   }
@@ -200,6 +226,7 @@ export class Player {
       return `${armor.name} не является броней.`;
     }
 
+    // Аналогично оружию, возвращаем старую броню в инвентарь.
     let result = '';
     if (this.equippedArmor) {
       this.addItem(this.equippedArmor);
@@ -207,14 +234,14 @@ export class Player {
     }
 
     this.equippedArmor = armor;
-    this.removeItem(armor.id);
+    this.removeItem(armor.globalId);
     result += `Вы экипировали ${armor.name}.`;
     return result;
   }
 
   /**
-   * Снимает экипированное оружие
-   * @returns {string} результат
+   * Снимает экипированное оружие и возвращает его в инвентарь.
+   * @returns {string} Сообщение о результате.
    */
   unequipWeapon() {
     if (!this.equippedWeapon) {
@@ -228,8 +255,8 @@ export class Player {
   }
 
   /**
-   * Снимает экипированную броню
-   * @returns {string} результат
+   * Снимает экипированную броню и возвращает ее в инвентарь.
+   * @returns {string} Сообщение о результате.
    */
   unequipArmor() {
     if (!this.equippedArmor) {
@@ -243,8 +270,9 @@ export class Player {
   }
 
   /**
-   * Получает бонус к урону от экипированного оружия
-   * @returns {number} бонус к урону
+   * Рассчитывает и возвращает урон от экипированного оружия.
+   * Примечание: этот метод возвращает полный урон оружия, а не только бонус.
+   * @returns {number} Итоговый урон от оружия.
    */
   getWeaponDamageBonus() {
     if (!this.equippedWeapon) {
@@ -254,7 +282,7 @@ export class Player {
     // Парсим урон оружия (например "1d6+1")
     const match = this.equippedWeapon.damage?.match(/(\d+)d(\d+)(?:([+-])(\d+))?/);
     if (!match) {
-      return 2; // базовый бонус
+      return 2; // Базовый бонус, если урон не указан.
     }
     
     const [, diceCount, diceSize, operator, modifier] = match;
@@ -275,8 +303,8 @@ export class Player {
   }
 
   /**
-   * Получает бонус к защите от экипированной брони
-   * @returns {number} бонус к защите
+   * Возвращает бонус к защите от экипированной брони.
+   * @returns {number} Бонус к защите.
    */
   getArmorDefenseBonus() {
     return this.equippedArmor ? (this.equippedArmor.armor || 0) : 0;

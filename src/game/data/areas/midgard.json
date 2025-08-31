@@ -1,0 +1,176 @@
+{
+  "id": "midgard",
+  "name": "Мидгард",
+  "description": "Центральный город королевства, отправная точка для многих приключений.",
+  "items": {
+    "iron_sword": {
+      "name": "железный меч",
+      "description": "Хорошо сбалансированный железный меч с острым лезвием.",
+      "type": "weapon",
+      "damage": "1d6+1",
+      "weight": 3,
+      "value": 50,
+      "canTake": true
+    },
+    "healing_potion": {
+      "name": "зелье лечения",
+      "description": "Маленькая бутылочка с красной жидкостью, излучающей слабое свечение.",
+      "type": "potion",
+      "healAmount": 10,
+      "weight": 1,
+      "value": 25,
+      "canTake": true
+    },
+    "info_board": {
+      "name": "информационная доска",
+      "description": "Деревянная доска с объявлениями и правилами города.",
+      "type": "misc",
+      "weight": 50,
+      "value": 0,
+      "canTake": false,
+      "readText": "Добро пожаловать в Мидгард! Основные команды: look, go <направление>, get <предмет>, drop <предмет>, inventory, kill <цель>"
+    },
+    "leather_armor": {
+      "name": "кожаная броня",
+      "description": "Прочная кожаная броня, обеспечивающая базовую защиту.",
+      "type": "armor",
+      "armor": 2,
+      "weight": 5,
+      "value": 30,
+      "canTake": true
+    }
+  },
+  "npcs": {
+    "town_crier": {
+      "name": "городской глашатай",
+      "description": "Пожилой мужчина в ярких одеждах, громко объявляющий новости города.",
+      "type": "friendly",
+      "hitPoints": 15,
+      "maxHitPoints": 15,
+      "damage": "1d4",
+      "experience": 0,
+      "drops": [],
+      "dialogue": [
+        "Слушайте, слушайте! Новости Мидгарда!",
+        "В восточном квартале открылась новая лавка!",
+        "Будьте осторожны в западном квартале - видели крыс!"
+      ]
+    },
+    "city_guard": {
+      "name": "городской стражник",
+      "description": "Сильный воин в кольчуге с мечом на поясе. Внимательно следит за порядком.",
+      "type": "friendly",
+      "hitPoints": 25,
+      "maxHitPoints": 25,
+      "damage": "1d6+2",
+      "experience": 0,
+      "drops": [],
+      "dialogue": [
+        "Добро пожаловать в Мидгард, путник.",
+        "Соблюдайте порядок в городе.",
+        "Если нужна помощь - обращайтесь к глашатаю на площади."
+      ]
+    },
+    "priest": {
+      "name": "жрец храма",
+      "description": "Добрый старик в белых одеждах. Его глаза излучают мудрость и сочувствие.",
+      "type": "friendly",
+      "hitPoints": 20,
+      "maxHitPoints": 20,
+      "damage": "1d4+1",
+      "experience": 0,
+      "drops": [],
+      "dialogue": [
+        "Да благословят вас боги, дитя мое.",
+        "Этот храм всегда открыт для нуждающихся в исцелении.",
+        "Произнесите \"heal me\", если нужно восстановить здоровье."
+      ],
+      "canHeal": true
+    },
+    "merchant": {
+      "name": "торговец",
+      "description": "Упитанный торговец с хитрой улыбкой. На его прилавке множество товаров.",
+      "type": "neutral",
+      "hitPoints": 18,
+      "maxHitPoints": 18,
+      "damage": "1d4",
+      "experience": 0,
+      "drops": [],
+      "dialogue": [
+        "Добро пожаловать в мою лавку!",
+        "У меня лучшие товары во всем Мидгарде!",
+        "Что желаете купить?"
+      ],
+      "shop": ["iron_sword", "leather_armor", "healing_potion"]
+    },
+    "rat": {
+      "name": "крыса",
+      "description": "Большая серая крыса с красными глазами и острыми зубами.",
+      "type": "hostile",
+      "hitPoints": 8,
+      "maxHitPoints": 8,
+      "damage": "1d4",
+      "experience": 10,
+      "drops": [],
+      "dialogue": ["*шипит*", "*скалит зубы*"]
+    },
+    "stray_dog": {
+      "name": "бродячая собака",
+      "description": "Худая, но мускулистая собака с диким взглядом. Она рычит, показывая клыки.",
+      "type": "hostile",
+      "hitPoints": 16,
+      "maxHitPoints": 16,
+      "damage": "1d6+1",
+      "experience": 25,
+      "drops": [],
+      "dialogue": ["Гав-гав!", "*рычит*"],
+      "canWander": true,
+      "fleesAtPercent": 0.25,
+      "specialAbilities": [{ "name": "bark", "chance": 0.2, "message": "Бродячая собака издает оглушительный лай! Вы в панике отступаете." }]
+    }
+  },
+  "rooms": {
+    "center": {
+      "name": "Центральная площадь Мидгарда",
+      "description": "Большая мощеная площадь в центре города. Здесь всегда много народу. В центре площади стоит красивый фонтан.",
+      "exits": { "север": "north_gate", "юг": "south_gate", "восток": "east_quarter", "запад": "west_quarter" },
+      "items": ["info_board"],
+      "npcs": ["town_crier"]
+    },
+    "north_gate": {
+      "name": "Северные ворота",
+      "description": "Массивные каменные ворота, ведущие на север из города. Стражники внимательно следят за всеми проходящими.",
+      "exits": { "юг": "center", "наружу": { "area": "wildlands", "room": "road_to_midgard" } },
+      "items": [],
+      "npcs": ["city_guard"]
+    },
+    "south_gate": {
+      "name": "Южные ворота",
+      "description": "Южный вход в город. Ворота украшены резьбой с изображениями древних героев.",
+      "exits": { "север": "center", "юг": "temple" },
+      "items": [],
+      "npcs": ["city_guard"]
+    },
+    "temple": {
+      "name": "Храм исцеления",
+      "description": "Священное место с высокими сводами и мягким светом. Воздух наполнен умиротворением и запахом благовоний.",
+      "exits": { "север": "south_gate" },
+      "items": ["healing_potion"],
+      "npcs": ["priest"]
+    },
+    "east_quarter": {
+      "name": "Восточный квартал",
+      "description": "Торговый район города с множеством лавок и мастерских. Здесь всегда что-то продают или покупают.",
+      "exits": { "запад": "center" },
+      "items": ["iron_sword"],
+      "npcs": ["merchant"]
+    },
+    "west_quarter": {
+      "name": "Западный квартал",
+      "description": "Тихий жилой район с небольшими домами горожан. Иногда здесь можно встретить бродячих собак или крыс.",
+      "exits": { "восток": "center" },
+      "items": [],
+      "npcs": ["rat", "stray_dog"]
+    }
+  }
+}

@@ -3,35 +3,42 @@ import { Player } from './classes/Player.js';
 import { Room } from './classes/Room.js';
 import { NPC } from './classes/NPC.js';
 import { CommandParser } from './classes/CommandParser.js';
-import { rooms } from './data/rooms.js';
-import { items } from './data/items.js';
-import { npcs } from './data/npcs.js';
 
 /**
  * Основной игровой движок
  * Управляет состоянием игры, обработкой команд и игровой логикой
  */
 export class GameEngine {
-  // Helper to wrap text in a span with a class for colorization
+  /**
+   * Вспомогательная функция для оборачивания текста в span с классом для стилизации.
+   * @param {string} text - Текст для стилизации.
+   * @param {string} className - CSS-класс.
+   * @returns {string} HTML-строка.
+   */
   colorize = (text, className) => `<span class="${className}">${text}</span>`;
 
   constructor() {
     this.player = new Player();
-    this.rooms = new Map();
-    this.npcs = new Map();
     this.commandParser = new CommandParser();
-    this.messageHistory = [];
-    this.gameState = 'menu'; // menu, playing, paused
-    this.combatTarget = null; // текущая цель в бою
-    this.combatInterval = null; // интервал для автоматического боя
-    this.respawnQueue = []; // очередь для возрождения НПС
-    this.listeners = {}; // { eventName: [callback, ...] }
-    
-    this.initializeWorld();
+
+    // Глобальные хранилища для всех загруженных данных
+    this.rooms = new Map(); // Карта комнат, ключ - глобальный ID
+    this.items = new Map(); // Карта предметов, ключ - глобальный ID
+    this.npcs = new Map(); // Карта NPC, ключ - глобальный ID
+    this.areas = new Map(); // Карта метаданных загруженных зон
+    this.loadedAreaIds = new Set(); // Набор ID уже загруженных зон
+
+    this.messageHistory = []; // История сообщений для вывода в терминал
+    this.gameState = 'menu'; // Состояние игры: menu, playing, paused
+    this.combatTarget = null; // Текущая цель в бою (глобальный ID)
+    this.combatInterval = null; // Интервал для автоматического боя
+    this.respawnQueue = []; // Очередь для возрождения НПС
+    this.listeners = {}; // Объект для подписчиков на события { eventName: [callback, ...] }
+
     this.registerCommands();
 
-    // Основной игровой цикл для обработки асинхронных событий, таких как возрождение
-    // this.gameLoopInterval = setInterval(() => this.update(), 1000); // Управление циклом передано в GameTerminal.vue
+    // Основной игровой цикл (тикер) для обработки асинхronных событий, таких как возрождение.
+    // Управление вызовом `update()` передано в компонент GameTerminal.vue.
   }
 
   /**
@@ -58,18 +65,58 @@ export class GameEngine {
   }
 
   /**
-   * Инициализация игрового мира
-   * Создает объекты локаций и НПС из статических данных
+   * Инициализация игрового мира. Загружает стартовую зону.
+   * Должен вызываться асинхронно после создания экземпляра.
    */
-  initializeWorld() {
-    // Создаем локации
-    for (let [roomId, roomData] of Object.entries(rooms)) {
-      this.rooms.set(roomId, new Room(roomData));
+  async initializeWorld() {
+    await this.loadArea('midgard');
+  }
+
+  /**
+   * Загружает игровую зону (area) из JSON файла.
+   * @param {string} areaId - ID зоны для загрузки (например, 'midgard').
+   */
+  async loadArea(areaId) {
+    if (this.loadedAreaIds.has(areaId)) {
+      console.log(`Зона ${areaId} уже загружена.`);
+      return true;
     }
-    
-    // Создаем НПС
-    for (let [npcId, npcData] of Object.entries(npcs)) {
-      this.npcs.set(npcId, new NPC(npcData));
+
+    try {
+      const response = await fetch(`/src/game/data/areas/${areaId}.json`);
+      if (!response.ok) {
+        throw new Error(`Не удалось загрузить зону: ${areaId}`);
+      }
+      const areaData = await response.json();
+
+      // Сохраняем метаданные зоны
+      this.areas.set(areaId, {
+        id: areaData.id,
+        name: areaData.name,
+        description: areaData.description,
+      });
+
+      // Загружаем предметы с глобальными ID
+      for (const [localId, itemData] of Object.entries(areaData.items)) {
+        this.items.set(`${areaId}:${localId}`, { id: localId, area: areaId, ...itemData });
+      }
+
+      // Загружаем NPC с глобальными ID
+      for (const [localId, npcData] of Object.entries(areaData.npcs)) {
+        this.npcs.set(`${areaId}:${localId}`, new NPC({ id: localId, area: areaId, ...npcData }));
+      }
+
+      // Загружаем комнаты с глобальными ID
+      for (const [localId, roomData] of Object.entries(areaData.rooms)) {
+        this.rooms.set(`${areaId}:${localId}`, new Room({ id: localId, area: areaId, ...roomData }));
+      }
+
+      this.loadedAreaIds.add(areaId);
+      console.log(`Зона ${areaId} успешно загружена.`);
+      return true;
+    } catch (error) {
+      console.error(`Ошибка при загрузке зоны ${areaId}:`, error);
+      return false;
     }
   }
 
@@ -176,6 +223,11 @@ export class GameEngine {
       'сбежать из боя',
       ['сбежать']
     );
+
+    this.commandParser.registerCommand('respawn', this.cmdRespawn.bind(this),
+      'возродиться после смерти',
+      ['возродиться']
+    );
   }
 
   /**
@@ -183,27 +235,27 @@ export class GameEngine {
    * @param {string} input - текстовый ввод
    * @returns {string} результат выполнения
    */
-  processCommand(input) {
-    if (this.player.state === 'dead') {
+  async processCommand(input) {
+    const parsed = this.commandParser.parseCommand(input);
+    // Если игрок мертв, разрешаем только команду 'respawn'
+    if (this.player.state === 'dead' && parsed.command !== 'respawn') {
       return 'Вы мертвы. Используйте команду "respawn" для возрождения.';
     }
 
-    const parsed = this.commandParser.parseCommand(input);
-
-    // NEW: Check for commands during combat
+    // Проверка на доступные команды во время боя
     const allowedCombatCommands = ['flee', 'look', 'inventory', 'stats', 'use'];
     if (this.player.state === 'fighting' && !allowedCombatCommands.includes(parsed.command)) {
       return 'Вы не можете сделать это в бою! Попробуйте `flee` (сбежать).';
     }
 
-    const result = this.commandParser.executeCommand(parsed, this);
+    const result = await this.commandParser.executeCommand(parsed, this);
 
-    // После каждой команды оповещаем UI о возможном изменении состояния
+    // После каждой команды оповещаем UI о возможном изменении состояния игрока
     this.emit('update');
     
     // Добавляем команду и результат в историю
     this.messageHistory.push(`> ${input}`);
-    if (result) { // Не добавляем пустые ответы (например, от асинхронных команд)
+    if (result) { // Не добавляем пустые ответы (например, от асинхронных команд, которые работают через emit)
       this.messageHistory.push(result);
     }
     
@@ -217,6 +269,7 @@ export class GameEngine {
 
   /**
    * Основной метод обновления, вызываемый в игровом цикле.
+   * @returns {string[]} Массив сообщений, сгенерированных за один тик.
    */
   update() {
     const messages = this.checkRespawns();
@@ -226,6 +279,7 @@ export class GameEngine {
 
   /**
    * Проверяет очередь возрождения и возрождает НПС, если пришло время.
+   * @returns {string[]} Массив сообщений о возрождении.
    */
   checkRespawns() {
     const messages = [];
@@ -233,14 +287,15 @@ export class GameEngine {
 
     this.respawnQueue = this.respawnQueue.filter(entry => {
       if (now >= entry.respawnTime) {
-        const npc = this.getNpc(entry.npcId);
+        const [areaId, npcId] = this._parseGlobalId(entry.globalNpcId);
+        const npc = this.getNpc(npcId, areaId);
         const room = this.rooms.get(entry.roomId);
         // Возрождаем, только если НПС еще не в комнате
-        if (npc && room && !room.hasNpc(entry.npcId)) {
-          npc.respawn();
-          room.addNpc(entry.npcId);
-          // NEW: Check if player is in the room and add a message
+        if (npc && room && !room.hasNpc(npcId)) {
+          npc.respawn(this);
+          room.addNpc(npc.id); // Используем локальный ID
           if (this.player.currentRoom === entry.roomId) {
+              // Если игрок в комнате, сообщаем ему о возрождении
               messages.push(this.colorize(`${npc.name} появляется из тени!`, 'combat-npc-death'));
               this.emit('update'); // Оповещаем UI об обновлении
           }
@@ -255,19 +310,20 @@ export class GameEngine {
 
   /**
    * Обновляет положение блуждающих НПС.
+   * @returns {string[]} Массив сообщений о перемещении NPC.
    */
   updateWanderingNpcs() {
     const messages = [];
     const WANDER_CHANCE = 0.05; // 5% шанс в секунду на перемещение
 
-    for (const npc of this.npcs.values()) {
+    for (const [globalNpcId, npc] of this.npcs.entries()) {
       // НПС не должен перемещаться, если он в бою
-      if (npc.canWander && npc.isAlive() && this.combatTarget !== npc.id && Math.random() < WANDER_CHANCE) {
+      if (npc.canWander && npc.isAlive() && this.combatTarget !== globalNpcId && Math.random() < WANDER_CHANCE) {
         // Находим комнату, в которой находится НПС
         let currentNpcRoom = null;
         let currentNpcRoomId = null;
         for (const [roomId, room] of this.rooms.entries()) {
-          if (room.hasNpc(npc.id)) {
+          if (room.hasNpc(npc.id)) { // room.npcs хранит локальные ID
             currentNpcRoom = room;
             currentNpcRoomId = roomId;
             break;
@@ -277,11 +333,13 @@ export class GameEngine {
         if (currentNpcRoom) {
           const exits = currentNpcRoom.getExits();
           if (exits.length > 0) {
+            // Перемещение между зонами сложно, поэтому пока NPC блуждают только внутри своей зоны.
             const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
-            const targetRoomId = currentNpcRoom.getExit(randomExitDirection);
-            const targetRoom = this.rooms.get(targetRoomId);
+            const exit = currentNpcRoom.getExit(randomExitDirection);
 
-            if (targetRoom) {
+            if (typeof exit === 'string') { // Перемещаемся только внутри текущей зоны
+              const targetRoomId = this._getGlobalId(exit, currentNpcRoom.area);
+              const targetRoom = this.rooms.get(targetRoomId);
               currentNpcRoom.removeNpc(npc.id);
               targetRoom.addNpc(npc.id);
 
@@ -303,11 +361,11 @@ export class GameEngine {
 
   /**
    * Планирует возрождение НПС.
-   * @param {string} npcId - ID НПС для возрождения.
+   * @param {string} globalNpcId - Глобальный ID НПС для возрождения.
    * @param {string} roomId - ID комнаты, где НПС должен возродиться.
    */
-  scheduleNpcRespawn(npcId, roomId) {
-    const npc = this.getNpc(npcId);
+  scheduleNpcRespawn(globalNpcId, roomId) {
+    const npc = this.npcs.get(globalNpcId);
     // Возрождаем только враждебных НПС (например, крыс)
     if (!npc || npc.type !== 'hostile') {
       return;
@@ -315,7 +373,7 @@ export class GameEngine {
 
     const RESPAWN_TIME = 30000; // 30 секунд
     this.respawnQueue.push({
-      npcId,
+      globalNpcId,
       roomId,
       respawnTime: Date.now() + RESPAWN_TIME
     });
@@ -325,41 +383,40 @@ export class GameEngine {
    * Команда: look - осмотр локации или предмета
    */
   cmdLook(cmd) {
+    if (this.player.state === 'dead') {
+      return this.colorize(
+        'Вы бестелесный дух, парящий над своим телом.\nМир вокруг кажется серым и размытым. Вы можете только \'respawn\' (возродиться).',
+        'player-dead-look'
+      );
+    }
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
     
     if (!cmd.target) {
       // Осматриваем локацию
-      return currentRoom.getFullDescription(this);
+      return currentRoom.getFullDescription(this, currentAreaId);
     }
     
     // Осматриваем конкретный предмет или НПС
     const target = cmd.target.toLowerCase();
     
     // Ищем среди предметов в комнате
-    const roomItem = currentRoom.items.find(itemId => {
-      const item = this.getItem(itemId);
-      return item && (item.name.toLowerCase().includes(target) || item.id.toLowerCase().includes(target));
-    });
-    
-    if (roomItem) {
-      const item = this.getItem(roomItem);
+    const roomItemId = currentRoom.findItem(target, this, currentAreaId);
+    if (roomItemId) {
+      const item = this.getItem(roomItemId, currentAreaId);
       return item.description + (item.readText ? `\n\nНа ${this.colorize(item.name, 'item-name')} написано: "${item.readText}"` : '');
     }
     
     // Ищем среди предметов в инвентаре
-    const inventoryItem = this.player.findItem(target);
-    if (inventoryItem && inventoryItem.name.toLowerCase().includes(target)) {
+    const inventoryItem = this.player.findItem(target, this);
+    if (inventoryItem) {
       return inventoryItem.description;
     }
     
     // Ищем среди НПС
-    const npcInRoom = currentRoom.npcs.find(npcId => {
-      const npc = this.getNpc(npcId);
-      return npc && (npc.name.toLowerCase().includes(target) || npc.id.toLowerCase().includes(target));
-    });
-    
-    if (npcInRoom) {
-      const npc = this.getNpc(npcInRoom);
+    const npcIdInRoom = currentRoom.findNpc(target, this, currentAreaId);
+    if (npcIdInRoom) {
+      const npc = this.getNpc(npcIdInRoom, currentAreaId);
       return npc.description + (npc.hitPoints <= 0 ? this.colorize(' (мертв)', 'npc-dead') : '');
     }
     
@@ -369,29 +426,48 @@ export class GameEngine {
   /**
    * Команда: go - перемещение между локациями
    */
-  cmdGo(cmd) {
+  async cmdGo(cmd) {
     if (!cmd.target) {
       return 'Куда вы хотите пойти? Используйте: go <направление>';
-    }
-    
-    const currentRoom = this.getCurrentRoom();
-    const direction = cmd.target.toLowerCase();
-    const exitRoomId = currentRoom.getExit(direction);
-    
-    if (!exitRoomId) {
-      return `Вы не можете пойти ${direction} отсюда.`;
     }
     
     if (this.player.state === 'fighting') {
       return 'Вы не можете уйти во время боя!';
     }
-    
-    this.player.currentRoom = exitRoomId;
-    const newRoom = this.getCurrentRoom();
 
+    const currentRoom = this.getCurrentRoom();
+    const direction = cmd.target.toLowerCase();
+    const exit = currentRoom.getExit(direction);
+    
+    if (!exit) {
+      return `Вы не можете пойти ${direction} отсюда.`;
+    }
+
+    let targetRoomId;
+
+    if (typeof exit === 'string') {
+      // Обычный переход внутри текущей зоны
+      const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
+      targetRoomId = this._getGlobalId(exit, currentAreaId);
+    } else if (typeof exit === 'object') {
+      // Межзоновый переход
+      const targetAreaId = exit.area;
+      const targetLocalRoomId = exit.room;
+
+      // Загружаем зону, если она еще не была загружена
+      if (!this.loadedAreaIds.has(targetAreaId)) {
+        this.emit('message', `Загрузка новой зоны: ${targetAreaId}...`);
+        await this.loadArea(targetAreaId);
+      }
+      targetRoomId = this._getGlobalId(targetLocalRoomId, targetAreaId);
+    }
+    
+    this.player.currentRoom = targetRoomId;
+    const newRoom = this.getCurrentRoom();
+    const [newAreaId, ] = this._parseGlobalId(targetRoomId);
     this.emit('update');
     
-    return `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}`;
+    return `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this, newAreaId)}`;
   }
 
   /**
@@ -402,21 +478,17 @@ export class GameEngine {
       return 'Что вы хотите взять?';
     }
     
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
     const target = cmd.target.toLowerCase();
     
     // Ищем предмет в локации
-    const itemId = currentRoom.items.find(itemId => {
-      const item = this.getItem(itemId);
-      return item && item.name.toLowerCase().includes(target);
-    });
-    
+    const itemId = currentRoom.findItem(target, this, currentAreaId);
     if (!itemId) {
       return `Вы не видите "${cmd.target}" здесь.`;
     }
     
-    const item = this.getItem(itemId);
-    
+    const item = this.getItem(itemId, currentAreaId);
     if (!item.canTake) {
       return `Вы не можете взять ${item.name}.`;
     }
@@ -427,7 +499,7 @@ export class GameEngine {
     
     // Перемещаем предмет из локации в инвентарь
     currentRoom.removeItem(itemId);
-    this.player.addItem(item);
+    this.player.addItem({ ...item, globalId: this._getGlobalId(item.id, item.area) });
     
     return `Вы взяли ${this.colorize(item.name, 'item-name')}.`;
   }
@@ -440,14 +512,14 @@ export class GameEngine {
       return 'Что вы хотите бросить?';
     }
     
-    const item = this.player.findItem(cmd.target);
+    const item = this.player.findItem(cmd.target, this);
     if (!item) {
       return `У вас нет "${cmd.target}".`;
     }
     
     const currentRoom = this.getCurrentRoom();
-    this.player.removeItem(item.id);
-    currentRoom.addItem(item.id);
+    this.player.removeItem(item.globalId);
+    currentRoom.addItem(item.id); // В комнату добавляем локальный ID
     
     return `Вы бросили ${this.colorize(item.name, 'item-name')}.`;
   }
@@ -488,20 +560,16 @@ export class GameEngine {
       return 'Кого вы хотите атаковать?';
     }
 
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
     const target = cmd.target.toLowerCase();
 
     // Ищем НПС в локации
-    const npcId = currentRoom.npcs.find(npcId => {
-      const npc = this.getNpc(npcId);
-      return npc && npc.name.toLowerCase().includes(target) && npc.isAlive();
-    });
-    
+    const npcId = currentRoom.findNpc(target, this, currentAreaId);
     if (!npcId) {
       return `Здесь нет "${cmd.target}" для атаки.`;
     }
-    
-    const npc = this.getNpc(npcId);
+    const npc = this.getNpc(npcId, currentAreaId);
     
     if (npc.type === 'friendly') {
       return `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} дружелюбен к вам. Вы не можете атаковать.`;
@@ -509,7 +577,7 @@ export class GameEngine {
     
     // Начинаем бой
     this.player.state = 'fighting';
-    this.combatTarget = npcId;
+    this.combatTarget = this._getGlobalId(npcId, currentAreaId);
     this.emit('update'); // Обновляем UI для отображения состояния боя
     
     // Запускаем боевой цикл
@@ -533,7 +601,7 @@ export class GameEngine {
    * @returns {string} результат боевого раунда
    */
   performCombatRound() {
-    const npc = this.getNpc(this.combatTarget);
+    const npc = this.npcs.get(this.combatTarget);
     if (!npc || !npc.isAlive()) {
       this.stopCombat();
       return 'Цель уже повержена.';
@@ -559,15 +627,18 @@ export class GameEngine {
       
       const drops = npc.getDeathDrops();
       if (drops.length > 0) {
+        const [npcAreaId, ] = this._parseGlobalId(this.combatTarget);
         const currentRoom = this.getCurrentRoom();
-        drops.forEach(itemId => currentRoom.addItem(itemId));
+        drops.forEach(localItemId => {
+          currentRoom.addItem(localItemId); // Добавляем локальный ID в комнату
+        });
         result += `\n${this.colorize(npc.name, `npc-name npc-${npc.type}`)} что-то оставил.`;
       }
       
-      const deadNpcId = this.combatTarget;
+      const deadNpcGlobalId = this.combatTarget;
       const deadNpcRoomId = this.player.currentRoom;
-      this.getCurrentRoom().removeNpc(deadNpcId);
-      this.scheduleNpcRespawn(deadNpcId, deadNpcRoomId);
+      this.getCurrentRoom().removeNpc(npc.id); // Удаляем по локальному ID
+      this.scheduleNpcRespawn(deadNpcGlobalId, deadNpcRoomId);
 
       this.stopCombat();
       return result;
@@ -580,11 +651,12 @@ export class GameEngine {
       const exits = currentRoom.getExits();
       if (exits.length > 0) {
         const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
-        const targetRoomId = currentRoom.getExit(randomExitDirection);
-        const targetRoom = this.rooms.get(targetRoomId);
-        if (targetRoom) {
+        const exit = currentRoom.getExit(randomExitDirection);
+        if (typeof exit === 'string') { // Пока что NPC может сбежать только в комнату той же зоны
+          const targetRoomId = this._getGlobalId(exit, currentRoom.area);
+          const targetRoom = this.rooms.get(targetRoomId);
           currentRoom.removeNpc(npc.id);
-          targetRoom.addNpc(npc.id);
+          targetRoom.addNpc(npc.id); // Добавляем локальный ID
           result += '\n' + this.colorize(`${npc.name} в страхе сбегает!`, 'combat-npc-death');
           this.stopCombat();
           return result;
@@ -665,10 +737,11 @@ export class GameEngine {
     
     // Все НПС в локации реагируют
     const responses = [];
-    currentRoom.npcs.forEach(npcId => {
-      const npc = this.getNpc(npcId);
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
+    currentRoom.npcs.forEach(localNpcId => {
+      const npc = this.getNpc(localNpcId, currentAreaId);
       if (npc?.isAlive()) {
-        responses.push(npc.speak(this));
+        responses.push(npc.speak(this, currentAreaId));
       }
     });
     
@@ -689,19 +762,15 @@ export class GameEngine {
       return 'С кем вы хотите поговорить?';
     }
 
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
     const target = cmd.target.toLowerCase();
 
-    const npcId = currentRoom.npcs.find(npcId => {
-      const npc = this.getNpc(npcId);
-      return npc && npc.name.toLowerCase().includes(target) && npc.isAlive();
-    });
-
+    const npcId = currentRoom.findNpc(target, this, currentAreaId);
     if (!npcId) {
       return `Здесь нет никого по имени "${cmd.target}".`;
     }
-
-    const npc = this.getNpc(npcId);
+    const npc = this.getNpc(npcId, currentAreaId);
     return npc.speak(this);
   }
 
@@ -713,14 +782,14 @@ export class GameEngine {
       return 'Что вы хотите использовать?';
     }
     
-    const item = this.player.findItem(cmd.target);
+    const item = this.player.findItem(cmd.target, this);
     if (!item) {
       return `У вас нет "${cmd.target}".`;
     }
     
     // Обработка зелий
     if (item.type === 'potion' && item.healAmount) {
-      const healed = this.player.heal(item.healAmount);
+      const healed = this.player.heal(item.healAmount, this);
       this.player.removeItem(item.id);
       return `Вы выпили ${this.colorize(item.name, 'item-name')}. Восстановлено ${healed} HP.`;
     }
@@ -771,7 +840,7 @@ export class GameEngine {
   /**
    * Команда: load - загрузка игры
    */
-  cmdLoad() {
+  async cmdLoad() {
     try {
       const loaded = this.loadGame();
       if (loaded) {
@@ -790,11 +859,12 @@ export class GameEngine {
    */
   cmdHeal() {
     const currentRoom = this.getCurrentRoom();
-    const priest = currentRoom.npcs.find(npcId => {
-      const npc = this.getNpc(npcId);
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
+    const priestId = currentRoom.npcs.find(localNpcId => {
+      const npc = this.getNpc(localNpcId, currentAreaId);
       return npc && npc.canHeal;
     });
-    
+    const priest = this.getNpc(priestId, currentAreaId);
     if (!priest) {
       return 'Здесь нет никого, кто мог бы вас исцелить.';
     }
@@ -804,7 +874,7 @@ export class GameEngine {
     }
     
     this.player.hitPoints = this.player.maxHitPoints;
-    return `${this.colorize(this.getNpc(priest).name, 'npc-name npc-friendly')} исцелил ваши раны. Вы полностью здоровы.`;
+    return `${this.colorize(priest.name, 'npc-name npc-friendly')} исцелил ваши раны. Вы полностью здоровы.`;
   }
 
   /**
@@ -814,11 +884,35 @@ export class GameEngine {
     if (this.player.state !== 'fighting') {
       return 'Вы не в бою.';
     }
-    const npc = this.getNpc(this.combatTarget);
+    const npc = this.npcs.get(this.combatTarget);
     this.stopCombat(true); // playerFled = true
     return `Вы успешно сбежали от ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`;
   }
 
+  /**
+   * Команда: respawn - возрождение игрока
+   */
+  cmdRespawn() {
+    if (this.player.state !== 'dead') {
+      return 'Вы и так живы.';
+    }
+
+    // Восстанавливаем состояние игрока
+    this.player.hitPoints = this.player.maxHitPoints;
+    this.player.state = 'idle';
+
+    // Перемещаем в стартовую локацию (хардкод для простоты)
+    const respawnRoomId = 'midgard:center';
+    this.player.currentRoom = respawnRoomId;
+
+    this.emit('update'); // Обновляем UI
+
+    const respawnRoom = this.rooms.get(respawnRoomId);
+    const [areaId, ] = this._parseGlobalId(respawnRoomId);
+
+    return this.colorize('Вы чувствуете, как жизнь возвращается в ваше тело. Мир вновь обретает краски.', 'player-respawn') + `\n\n` +
+           respawnRoom.getFullDescription(this, areaId);
+  }
 
   /**
    * Команда: equip - экипировка предмета
@@ -828,7 +922,7 @@ export class GameEngine {
       return 'Что вы хотите экипировать?';
     }
 
-    const item = this.player.findItem(cmd.target);
+    const item = this.player.findItem(cmd.target, this);
     if (!item) {
       return `У вас нет "${cmd.target}".`;
     }
@@ -864,26 +958,27 @@ export class GameEngine {
    * Команда: list - просмотр товаров торговца
    */
   cmdList() {
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
-    const merchant = currentRoom.npcs.find(npcId => {
-      const npc = this.getNpc(npcId);
+    const merchantId = currentRoom.npcs.find(localNpcId => {
+      const npc = this.getNpc(localNpcId, currentAreaId);
       return npc && npc.canTrade && npc.canTrade();
     });
 
-    if (!merchant) {
+    if (!merchantId) {
       return 'Здесь нет торговцев.';
     }
 
-    const npc = this.getNpc(merchant);
+    const npc = this.getNpc(merchantId, currentAreaId);
     const shopItems = npc.getShopItems();
     
     if (shopItems.length === 0) {
       return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Извините, товар закончился."`;
     }
 
-    let result = `${this.colorize(npc.name, 'npc-name npc-friendly')} предлагает:\n`;
-    shopItems.forEach((itemId, index) => {
-      const item = this.getItem(itemId);
+    let result = `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} предлагает:\n`;
+    shopItems.forEach((localItemId, index) => {
+      const item = this.getItem(localItemId, currentAreaId);
       if (item) {
         result += `${index + 1}. ${this.colorize(item.name, 'item-name')} - ${item.value || 'N/A'} золота\n`;
       }
@@ -901,39 +996,40 @@ export class GameEngine {
       return 'Что вы хотите купить?';
     }
 
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
-    const merchant = currentRoom.npcs.find(npcId => {
-      const npc = this.getNpc(npcId);
+    const merchantId = currentRoom.npcs.find(localNpcId => {
+      const npc = this.getNpc(localNpcId, currentAreaId);
       return npc && npc.canTrade && npc.canTrade();
     });
 
-    if (!merchant) {
+    if (!merchantId) {
       return 'Здесь нет торговцев.';
     }
 
-    const npc = this.getNpc(merchant);
+    const npc = this.getNpc(merchantId, currentAreaId);
     const shopItems = npc.getShopItems();
     const target = cmd.target.toLowerCase();
 
     // Ищем товар в магазине
-    const itemId = shopItems.find(itemId => {
-      const item = this.getItem(itemId);
+    const localItemId = shopItems.find(id => {
+      const item = this.getItem(id, currentAreaId);
       return item && item.name.toLowerCase().includes(target);
     });
 
-    if (!itemId) {
-      return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "У меня нет такого товара."`;
+    if (!localItemId) {
+      return `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} говорит: "У меня нет такого товара."`;
     }
 
-    const item = this.getItem(itemId);
+    const item = this.getItem(localItemId, currentAreaId);
     
     // Проверяем, может ли игрок нести предмет
-    if (!this.player.canCarry(item)) {
+    if (!this.player.canCarry(item, this)) {
       return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Этот товар слишком тяжел для вас."`;
     }
 
     // В упрощенной версии покупка бесплатная
-    this.player.addItem(item);
+    this.player.addItem({ ...item, globalId: this._getGlobalId(item.id, item.area) });
     return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Вот ваш ${this.colorize(item.name, 'item-name')}. Пользуйтесь на здоровье!"`;
   }
 
@@ -945,23 +1041,24 @@ export class GameEngine {
       return 'Что вы хотите продать?';
     }
 
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
-    const merchant = currentRoom.npcs.find(npcId => {
-      const npc = this.getNpc(npcId);
+    const merchantId = currentRoom.npcs.find(localNpcId => {
+      const npc = this.getNpc(localNpcId, currentAreaId);
       return npc && npc.canTrade && npc.canTrade();
     });
 
-    if (!merchant) {
+    if (!merchantId) {
       return 'Здесь нет торговцев.';
     }
 
-    const item = this.player.findItem(cmd.target);
+    const item = this.player.findItem(cmd.target, this);
     if (!item) {
       return `У вас нет "${cmd.target}".`;
     }
 
-    const npc = this.getNpc(merchant);
-    this.player.removeItem(item.id);
+    const npc = this.getNpc(merchantId, currentAreaId);
+    this.player.removeItem(item.globalId);
     
     const sellPrice = Math.floor((item.value || 10) / 2);
     return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Спасибо за ${this.colorize(item.name, 'item-name')}! Вот вам ${sellPrice} золота." (В этой версии золото пока не реализовано)`;
@@ -979,22 +1076,43 @@ export class GameEngine {
 
   /**
    * Получает предмет по ID
-   * @param {string} itemId - ID предмета
+   * @param {string} localId - Локальный ID предмета
+   * @param {string} areaId - ID зоны, в которой находится предмет
    * @returns {Object|null} данные предмета
    */
-  getItem(itemId) {
-    return items[itemId] || null;
+  getItem(localId, areaId) {
+    return this.items.get(this._getGlobalId(localId, areaId)) || null;
   }
 
   /**
    * Получает НПС по ID
-   * @param {string} npcId - ID НПС
+   * @param {string} localId - Локальный ID НПС
+   * @param {string} areaId - ID зоны, в которой находится НПС
    * @returns {NPC|null} объект НПС
    */
-  getNpc(npcId) {
-    return this.npcs.get(npcId) || null;
+  getNpc(localId, areaId) {
+    return this.npcs.get(this._getGlobalId(localId, areaId)) || null;
   }
 
+  /**
+   * Собирает глобальный ID из локального ID и ID зоны.
+   * @param {string} localId 
+   * @param {string} areaId 
+   * @returns {string} Глобальный ID (например, 'midgard:center')
+   */
+  _getGlobalId(localId, areaId) {
+    return `${areaId}:${localId}`;
+  }
+
+  /**
+   * Разбирает глобальный ID на ID зоны и локальный ID.
+   * @param {string} globalId 
+   * @returns {[string, string]} [areaId, localId]
+   */
+  _parseGlobalId(globalId) {
+    const parts = globalId.split(':');
+    return [parts[0], parts.slice(1).join(':')];
+  }
   /**
    * Сохранение игры в localStorage
    */
@@ -1020,8 +1138,8 @@ export class GameEngine {
         equippedArmor: this.player.equippedArmor,
         ui_version: this.player.ui_version || 0
       },
-      rooms: Object.fromEntries(this.rooms),
-      npcs: Object.fromEntries(this.npcs),
+      loadedAreaIds: Array.from(this.loadedAreaIds),
+      // Состояние комнат и NPC (предметы на полу, здоровье NPC) пока не сохраняем для простоты.
       timestamp: Date.now()
     };
     
@@ -1032,7 +1150,7 @@ export class GameEngine {
    * Загрузка игры из localStorage
    * @returns {boolean} успешна ли загрузка
    */
-  loadGame() {
+  async loadGame() {
     const saveData = localStorage.getItem('mudgame_save');
     if (!saveData) {
       return false;
@@ -1041,11 +1159,13 @@ export class GameEngine {
     try {
       const gameData = JSON.parse(saveData);
       
+      // Загружаем все зоны, которые были активны в сохраненной игре
+      for (const areaId of gameData.loadedAreaIds) {
+        await this.loadArea(areaId);
+      }
+
       // Загружаем данные игрока
       this.player.load(gameData.player);
-      
-      // Восстанавливаем состояние локаций и НПС (если есть изменения)
-      // В простой реализации можем пропустить, но для полноты добавим базовую поддержку
       
       return true;
     } catch (error) {
@@ -1056,17 +1176,19 @@ export class GameEngine {
 
   /**
    * Начинает новую игру
+   * @param {string} [playerName='Игрок'] - Имя игрока.
    */
-  startNewGame(playerName = 'Игрок') {
+  async startNewGame(playerName = 'Игрок') {
+    await this.initializeWorld();
     this.player = new Player(playerName);
     this.gameState = 'playing';
     
     // Начинаем в центре города
-    this.player.currentRoom = 'center';
-    
+    this.player.currentRoom = 'midgard:center';
+    const [startAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const welcomeMessage = `Добро пожаловать в Мидгард, ${playerName}!
 
-${this.getCurrentRoom().getFullDescription(this)}
+${this.getCurrentRoom().getFullDescription(this, startAreaId)}
 
 Введите 'help' для получения списка команд.`;
 
@@ -1089,7 +1211,11 @@ ${this.getCurrentRoom().getFullDescription(this)}
    */
   getAvailableRooms() {
     const currentRoom = this.getCurrentRoom();
-    return Array.from(currentRoom.exits.values());
+    if (!currentRoom) return [];
+
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
+
+    return Array.from(currentRoom.exits.values()).map(exit => (typeof exit === 'string' ? this._getGlobalId(exit, currentAreaId) : this._getGlobalId(exit.room, exit.area)));
   }
 
   /**
@@ -1097,7 +1223,7 @@ ${this.getCurrentRoom().getFullDescription(this)}
    * @param {string} targetRoomId - ID целевой комнаты
    * @returns {Object} результат перехода
    */
-  moveToRoom(targetRoomId) {
+  async moveToRoom(targetRoomId) {
     if (this.player.state === 'fighting') {
       return { success: false, message: 'Вы не можете уйти во время боя!' };
     }
@@ -1109,9 +1235,26 @@ ${this.getCurrentRoom().getFullDescription(this)}
       return { success: false, message: 'Эта комната недоступна отсюда.' };
     }
 
+    const [targetAreaId] = this._parseGlobalId(targetRoomId);
+    if (!this.loadedAreaIds.has(targetAreaId)) {
+      this.emit('message', `Загрузка новой зоны: ${targetAreaId}...`);
+      await this.loadArea(targetAreaId);
+    }
+
     // Находим направление для перехода
-    const direction = Array.from(currentRoom.exits.entries())
-      .find(([dir, roomId]) => roomId === targetRoomId)?.[0];
+    let direction = 'куда-то';
+    for (const [dir, exit] of currentRoom.exits.entries()) {
+      let exitGlobalId;
+      if (typeof exit === 'string') {
+        exitGlobalId = this._getGlobalId(exit, currentRoom.area);
+      } else {
+        exitGlobalId = this._getGlobalId(exit.room, exit.area);
+      }
+      if (exitGlobalId === targetRoomId) {
+        direction = dir;
+        break;
+      }
+    }
 
     this.player.currentRoom = targetRoomId;
     const newRoom = this.getCurrentRoom();
@@ -1120,7 +1263,7 @@ ${this.getCurrentRoom().getFullDescription(this)}
 
     return { 
       success: true, 
-      message: `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}` 
+      message: `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this, targetAreaId)}` 
     };
   }
 }

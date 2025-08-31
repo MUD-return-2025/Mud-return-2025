@@ -1,0 +1,48 @@
+{
+  "id": "wildlands",
+  "name": "Дикие земли",
+  "description": "Необузданные территории за пределами городов.",
+  "items": {
+    "sharp_stone": {
+      "name": "острый камень",
+      "description": "Простой, но острый камень, который можно использовать как примитивное оружие.",
+      "type": "weapon",
+      "damage": "1d4",
+      "weight": 1,
+      "value": 1,
+      "canTake": true
+    }
+  },
+  "npcs": {
+    "wolf": {
+      "name": "волк",
+      "description": "Серый волк, рыщущий в поисках добычи.",
+      "type": "hostile",
+      "hitPoints": 12,
+      "maxHitPoints": 12,
+      "damage": "1d6",
+      "experience": 20,
+      "drops": [],
+      "dialogue": ["*Воет на луну*"]
+    }
+  },
+  "rooms": {
+    "road_to_midgard": {
+      "name": "Дорога к Мидгарду",
+      "description": "Пыльная дорога, ведущая к великому городу. Вдалеке видны его стены.",
+      "exits": {
+        "в город": { "area": "midgard", "room": "north_gate" },
+        "вглубь земель": "wolf_clearing"
+      },
+      "items": [],
+      "npcs": []
+    },
+    "wolf_clearing": {
+      "name": "Волчья поляна",
+      "description": "Открытая поляна, усеянная костями. Похоже, это охотничьи угодья хищников.",
+      "exits": { "на дорогу": "road_to_midgard" },
+      "items": ["sharp_stone"],
+      "npcs": ["wolf"]
+    }
+  }
+}

@@ -60,14 +60,18 @@ const togglePanel = () => {
  * @param {Object} item - Объект предмета.
  */
 const selectItem = (item) => {
-  selectedItem.value = selectedItem.value?.id === item.id ? null : item;
+  selectedItem.value = selectedItem.value?.globalId === item.globalId ? null : item;
 };
 
+/**
+ * Отслеживает изменения в инвентаре игрока.
+ * Если выбранный предмет был удален из инвентаря (например, использован или выброшен),
+ * то выбор сбрасывается.
+ */
 watch(
   () => props.player,
   (newPlayer) => {
-    // Если выбранный предмет больше не находится в инвентаре, сбрасываем выбор.
-    if (selectedItem.value && !newPlayer.inventory.some(item => item.id === selectedItem.value.id)) {
+    if (selectedItem.value && !newPlayer.inventory.some(item => item.globalId === selectedItem.value.globalId)) {
       selectedItem.value = null;
     }
   },
@@ -125,35 +129,50 @@ const getPlayerDefense = () => {
   return defense;
 };
 
-// Методы для работы с картой
 /**
- * Проверяет, доступна ли комната для посещения.
- * @param {string} roomId - ID комнаты.
+ * @description Вычисляемые свойства для определения текущей зоны и комнаты.
+ * Возвращают массив `[areaId, localRoomId]`.
+ */
+const currentRoomIds = computed(() => {
+  if (!props.gameStarted || !props.player.currentRoom) return [null, null];
+  return props.gameEngine._parseGlobalId(props.player.currentRoom);
+});
+const currentAreaId = computed(() => currentRoomIds.value[0]);
+const currentLocalRoomId = computed(() => currentRoomIds.value[1]);
+
+/**
+ * Проверяет, доступна ли комната для посещения из текущей.
+ * @param {string} localRoomId - Локальный ID комнаты.
  * @returns {boolean} true, если комната доступна.
  */
-const isRoomAvailable = (roomId) => {
+const isRoomAvailable = (localRoomId) => {
   if (!props.gameStarted) return false;
+  // Для проверки доступности комнаты на карте мы предполагаем, что она находится в той же зоне.
+  // Это ограничение текущей реализации карты.
+  const globalRoomId = props.gameEngine._getGlobalId(localRoomId, currentAreaId.value);
   const availableRooms = props.gameEngine.getAvailableRooms();
-  return availableRooms.includes(roomId);
+  return availableRooms.includes(globalRoomId);
 };
 
 /**
- * Проверяет, можно ли кликнуть по комнате для перемещения.
- * @param {string} roomId - ID комнаты.
+ * Проверяет, можно ли кликнуть по комнате на карте для перемещения.
+ * @param {string} localRoomId - Локальный ID комнаты.
  * @returns {boolean} true, если по комнате можно кликнуть.
  */
-const isRoomClickable = (roomId) => {
-  return props.gameStarted && roomId !== props.player.currentRoom && isRoomAvailable(roomId);
+const isRoomClickable = (localRoomId) => {
+  if (!props.gameStarted) return false;
+  return localRoomId !== currentLocalRoomId.value && isRoomAvailable(localRoomId);
 };
 
 /**
  * Инициирует перемещение в указанную комнату.
- * @param {string} roomId - ID комнаты.
+ * @param {string} localRoomId - Локальный ID комнаты.
  */
-const moveToRoom = (roomId) => {
-  if (!isRoomClickable(roomId)) return;
+const moveToRoom = async (localRoomId) => {
+  if (!isRoomClickable(localRoomId)) return;
+  const globalRoomId = props.gameEngine._getGlobalId(localRoomId, currentAreaId.value);
 
-  const result = props.gameEngine.moveToRoom(roomId);
+  const result = await props.gameEngine.moveToRoom(globalRoomId);
   if (result.success) {
     emit('move', result.message);
   } else {
@@ -161,34 +180,50 @@ const moveToRoom = (roomId) => {
   }
 };
 
-/** @type {import('vue').ComputedRef<import('../../game/classes/Room').Room | null>} */
+/**
+ * @description Вычисляемое свойство для получения текущей комнаты игрока.
+ * Реагирует на изменение `props.player.currentRoom`.
+ * @type {import('vue').ComputedRef<import('../../game/classes/Room').Room | null>}
+ */
 const currentRoom = computed(() => {
   if (!props.gameStarted || !props.player.currentRoom) return null;
-  // Make this computed property reactive to player's room changes
   return props.gameEngine.rooms.get(props.player.currentRoom);
 });
 
-/** @type {import('vue').ComputedRef<import('../../game/classes/NPC').NPC[]>} */
+/**
+ * @description Вычисляемое свойство, возвращающее список живых NPC в текущей комнате.
+ * Зависит от `props.updateCounter`, чтобы принудительно пересчитываться,
+ * когда движок сообщает об изменениях (например, смерть NPC).
+ * @type {import('vue').ComputedRef<import('../../game/classes/NPC').NPC[]>}
+ */
 const npcsInRoom = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter; // Зависимость для пересчета
   if (!currentRoom.value) return [];
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter; // Принудительная реактивность при обновлении из движка
+  const areaId = currentRoom.value.area;
   return currentRoom.value.npcs
-    .map(npcId => props.gameEngine.getNpc(npcId))
+    .map(npcId => props.gameEngine.getNpc(npcId, areaId))
     .filter(npc => npc && npc.isAlive());
 });
 
-/** @type {import('vue').ComputedRef<Object[]>} */
+/**
+ * @description Вычисляемое свойство, возвращающее список предметов в текущей комнате.
+ * Зависит от `props.updateCounter` для принудительной перерисовки.
+ * @type {import('vue').ComputedRef<Object[]>}
+ */
 const itemsInRoom = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter; // Зависимость для пересчета
   if (!currentRoom.value) return [];
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter; // Принудительная реактивность при обновлении из движка
+  const areaId = currentRoom.value.area;
   return currentRoom.value.items
-    .map(itemId => props.gameEngine.getItem(itemId))
+    .map(itemId => props.gameEngine.getItem(itemId, areaId))
     .filter(Boolean);
 });
 
+/** @description Вычисляемое свойство, проверяющее, есть ли торговец в комнате. */
 const hasTrader = computed(() => npcsInRoom.value.some(npc => npc.canTrade && npc.canTrade()));
+/** @description Вычисляемое свойство, проверяющее, есть ли целитель в комнате. */
 const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
 </script>
 
@@ -263,10 +298,10 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
           <div v-else class="inventory-list">
             <div 
               v-for="item in player.inventory" 
-              :key="item.id"
+              :key="item.globalId"
               class="inventory-item"
               @click="selectItem(item)"
-              :class="{ selected: selectedItem?.id === item.id }"
+              :class="{ selected: selectedItem?.globalId === item.globalId }"
             >
               <span class="item-name">{{ item.name }}</span>
               <span class="item-weight">{{ item.weight || 0 }}кг</span>
@@ -346,6 +381,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
         </div>
 
         <!-- Вкладка "Мини-карта" -->
+        <!-- ВНИМАНИЕ: Текущая реализация карты жестко закодирована для зоны "Мидгард". -->
         <div v-if="activeTab === 'map'" class="map-tab-content">
           <div class="minimap">
             <div class="minimap-grid">
@@ -353,7 +389,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
               <div 
                 class="map-room" 
                 :class="{ 
-                  active: player.currentRoom === 'north_gate',
+                  active: currentLocalRoomId === 'north_gate' && currentAreaId === 'midgard',
                   available: isRoomAvailable('north_gate'),
                   clickable: isRoomClickable('north_gate')
                 }" 
@@ -367,7 +403,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
               <div 
                 class="map-room" 
                 :class="{ 
-                  active: player.currentRoom === 'center',
+                  active: currentLocalRoomId === 'center' && currentAreaId === 'midgard',
                   available: isRoomAvailable('center'),
                   clickable: isRoomClickable('center')
                 }" 
@@ -381,7 +417,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
               <div 
                 class="map-room" 
                 :class="{ 
-                  active: player.currentRoom === 'east_quarter',
+                  active: currentLocalRoomId === 'east_quarter' && currentAreaId === 'midgard',
                   available: isRoomAvailable('east_quarter'),
                   clickable: isRoomClickable('east_quarter')
                 }" 
@@ -395,7 +431,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
               <div 
                 class="map-room" 
                 :class="{ 
-                  active: player.currentRoom === 'west_quarter',
+                  active: currentLocalRoomId === 'west_quarter' && currentAreaId === 'midgard',
                   available: isRoomAvailable('west_quarter'),
                   clickable: isRoomClickable('west_quarter')
                 }" 
@@ -409,7 +445,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
               <div 
                 class="map-room" 
                 :class="{ 
-                  active: player.currentRoom === 'south_gate',
+                  active: currentLocalRoomId === 'south_gate' && currentAreaId === 'midgard',
                   available: isRoomAvailable('south_gate'),
                   clickable: isRoomClickable('south_gate')
                 }" 
@@ -423,7 +459,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
               <div 
                 class="map-room" 
                 :class="{ 
-                  active: player.currentRoom === 'temple',
+                  active: currentLocalRoomId === 'temple' && currentAreaId === 'midgard',
                   available: isRoomAvailable('temple'),
                   clickable: isRoomClickable('temple')
                 }" 

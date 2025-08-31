@@ -1,19 +1,33 @@
 /**
- * Парсер и обработчик игровых команд
- * Преобразует текстовый ввод в игровые действия
+ * Парсер и обработчик игровых команд.
+ * Преобразует текстовый ввод в игровые действия, поддерживает алиасы.
  */
 export class CommandParser {
+  /**
+   * Создает экземпляр CommandParser.
+   */
   constructor() {
+    /**
+     * @type {Map<string, {handler: Function, description: string, aliases: string[]}>}
+     * @description Карта зарегистрированных команд.
+     * Ключ - название команды, значение - объект с обработчиком, описанием и алиасами.
+     */
     this.commands = new Map();
-    this.aliases = new Map(); // алиасы команд для удобства
+    /**
+     * @type {Map<string, string>}
+     * @description Карта алиасов для команд.
+     * Ключ - алиас, значение - полная команда (например, 'л' -> 'look').
+     */
+    this.aliases = new Map();
     this.initializeCommands();
   }
 
   /**
-   * Инициализация базовых команд и их алиасов
+   * Инициализация базовых команд и их алиасов.
+   * Этот метод заполняет карту `this.aliases` для быстрого доступа.
    */
   initializeCommands() {
-    // Единый объект с алиасами
+    // Единый объект с алиасами для упрощения инициализации.
     const shortcuts = {
       'л': 'look',
       'смотреть': 'look',
@@ -49,7 +63,10 @@ export class CommandParser {
       'сохранить': 'save',
       'загрузить': 'load',
       'помощь': 'help',
-      'справка': 'help'
+      'справка': 'help',
+      // Добавлен алиас для побега из боя
+      'сбежать': 'flee',
+      'возродиться': 'respawn'
     };
 
     // Заполняем Map алиасов
@@ -59,9 +76,10 @@ export class CommandParser {
   }
 
   /**
-   * Парсит текстовую команду
-   * @param {string} input - ввод пользователя
-   * @returns {Object} объект команды {command, args, target, original}
+   * Парсит текстовую команду, преобразуя ее в структурированный объект.
+   * Учитывает алиасы, в том числе составные (например, "идти север").
+   * @param {string} input - Ввод пользователя.
+   * @returns {{command: string, args: string[], target: string, original: string}} Объект команды.
    */
   parseCommand(input) {
     if (!input || typeof input !== 'string') {
@@ -72,13 +90,14 @@ export class CommandParser {
     let command = parts[0];
     const args = parts.slice(1);
 
-    // Проверяем алиасы
+    // Проверяем, является ли введенная команда алиасом.
     const alias = this.aliases.get(command);
     if (alias) {
-      // Если алиас содержит пробел (например, "go north"), разбираем его
+      // Если алиас содержит пробел (например, "go north"), разбираем его на команду и аргументы.
       if (alias.includes(' ')) {
         const aliasParts = alias.split(' ');
         command = aliasParts[0];
+        // Добавляем аргументы из алиаса в начало списка аргументов.
         args.unshift(...aliasParts.slice(1));
       } else {
         command = alias;
@@ -88,17 +107,18 @@ export class CommandParser {
     return {
       command,
       args,
-      target: args.join(' '), // объединяем аргументы для многословных целей
+      // Объединяем аргументы в одну строку для удобной работы с многословными целями.
+      target: args.join(' '),
       original: input.trim()
     };
   }
 
   /**
-   * Регистрирует обработчик команды с описанием
-   * @param {string} commandName - название команды
-   * @param {Function} handler - функция-обработчик
-   * @param {string} description - описание команды для справки
-   * @param {Array<string>} aliases - массив алиасов для отображения в справке
+   * Регистрирует обработчик команды с описанием и алиасами.
+   * @param {string} commandName - Название команды.
+   * @param {Function} handler - Функция-обработчик, принимающая (parsedCommand, game).
+   * @param {string} [description=''] - Описание команды для справки.
+   * @param {string[]} [aliases=[]] - Массив алиасов для отображения в справке.
    */
   registerCommand(commandName, handler, description = '', aliases = []) {
     this.commands.set(commandName, {
@@ -109,20 +129,20 @@ export class CommandParser {
   }
 
   /**
-   * Генерирует справку на основе зарегистрированных команд
-   * @returns {string} текст справки
+   * Генерирует текст справки на основе зарегистрированных команд.
+   * @returns {string} Отформатированный текст справки.
    */
   generateHelp() {
     let helpText = '=== СПРАВКА ===\n';
     
-    // Сортируем команды для стабильного порядка
+    // Сортируем команды по алфавиту для стабильного и удобного вывода.
     const sortedCommands = Array.from(this.commands.entries()).sort((a, b) => a[0].localeCompare(b[0]));
     
     for (const [commandName, commandData] of sortedCommands) {
       if (commandData.description) {
         let line = `• ${commandName}`;
         
-        // Добавляем алиасы, если есть
+        // Добавляем алиасы, если они есть, для полноты информации.
         if (commandData.aliases && commandData.aliases.length > 0) {
           line += ` (${commandData.aliases.join(', ')})`;
         }
@@ -136,17 +156,17 @@ export class CommandParser {
   }
 
   /**
-   * Выполняет распарсенную команду
-   * @param {Object} parsedCommand - результат parseCommand
-   * @param {Object} game - ссылка на игровой движок
-   * @returns {string} результат выполнения команды
+   * Выполняет распарсенную команду, вызывая соответствующий обработчик.
+   * @param {Object} parsedCommand - Результат `parseCommand`.
+   * @param {import('../GameEngine').GameEngine} game - Ссылка на игровой движок для передачи в обработчик.
+   * @returns {string} Результат выполнения команды.
    */
   executeCommand(parsedCommand, game) {
     const commandData = this.commands.get(parsedCommand.command);
 
     if (commandData) {
       try {
-        // Поддерживаем как старый формат (функция), так и новый (объект)
+        // Поддерживаем как старый формат (функция), так и новый (объект с полем handler).
         const handler = typeof commandData === 'function' ? commandData : commandData.handler;
         return handler(parsedCommand, game);
       } catch (error) {
@@ -159,11 +179,14 @@ export class CommandParser {
   }
 
   /**
-   * Возвращает сообщение о неизвестной команде с подсказками
-   * @param {string} command - неизвестная команда
-   * @returns {string} сообщение с подсказками
+   * Возвращает сообщение о неизвестной команде с подсказками.
+   * @param {string} command - Неизвестная команда.
+   * @returns {string} Сообщение с подсказками.
    */
   getUnknownCommandMessage(command) {
+    // TODO: Этот список команд захардкожен. В идеале, его следует генерировать
+    // динамически или использовать `generateHelp()` для более полного ответа.
+    // Текущая реализация дана для простоты.
     const availableCommands = [
       'look (l, смотреть) - осмотреться',
       'go <направление> (идти) - идти в указанном направлении',
@@ -181,9 +204,9 @@ export class CommandParser {
   }
 
   /**
-   * Проверяет, является ли строка командой
-   * @param {string} input - ввод игрока
-   * @returns {boolean}
+   * Проверяет, является ли введенная строка валидной командой (или ее алиасом).
+   * @param {string} input - Ввод игрока.
+   * @returns {boolean} `true`, если команда существует.
    */
   isValidCommand(input) {
     const parsed = this.parseCommand(input);
