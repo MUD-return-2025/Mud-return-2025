@@ -228,6 +228,11 @@ export class GameEngine {
       'возродиться после смерти',
       ['возродиться']
     );
+
+    this.commandParser.registerCommand('consider', this.cmdConsider.bind(this),
+      'оценить предмет или противника',
+      ['con', 'consider']
+    );
   }
 
   /**
@@ -915,6 +920,125 @@ export class GameEngine {
   }
 
   /**
+   * Команда: consider - оценка предмета или NPC
+   */
+  cmdConsider(cmd) {
+    if (!cmd.target) {
+      return 'Что вы хотите оценить? (consider <предмет/нпс>)';
+    }
+
+    const target = cmd.target.toLowerCase();
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
+    const currentRoom = this.getCurrentRoom();
+
+    // 1. Проверяем предмет в инвентаре
+    let item = this.player.findItem(target, this);
+    if (item) {
+      return this._getConsiderItemString(item);
+    }
+
+    // 2. Проверяем предмет в комнате
+    const roomItemId = currentRoom.findItem(target, this, currentAreaId);
+    if (roomItemId) {
+      item = this.getItem(roomItemId, currentAreaId);
+      return this._getConsiderItemString(item);
+    }
+
+    // 3. Проверяем NPC в комнате
+    const npcId = currentRoom.findNpc(target, this, currentAreaId);
+    if (npcId) {
+      const npc = this.getNpc(npcId, currentAreaId);
+      return this._getConsiderNpcString(npc);
+    }
+
+    return `Вы не видите "${cmd.target}" здесь.`;
+  }
+
+  /**
+   * Формирует строку с описанием и сравнением предмета.
+   * @param {object} item - Предмет для оценки.
+   * @returns {string}
+   * @private
+   */
+  _getConsiderItemString(item) {
+    let result = `Вы рассматриваете ${this.colorize(item.name, 'item-name')}.\n`;
+    result += `${item.description}\n\n`;
+    result += `Характеристики:\n`;
+    if (item.type) result += `  Тип: ${item.type}\n`;
+    if (item.damage) result += `  Урон: ${item.damage}\n`;
+    if (item.armor) result += `  Защита: ${item.armor}\n`;
+    if (item.healAmount) result += `  Лечение: ${item.healAmount}\n`;
+    if (item.weight) result += `  Вес: ${item.weight}\n`;
+    if (item.value) result += `  Ценность: ${item.value} золота\n`;
+
+    // Логика сравнения
+    if (item.type === 'weapon') {
+      result += this._compareEquipment(item, this.player.equippedWeapon, 'Оружие');
+    } else if (item.type === 'armor') {
+      result += this._compareEquipment(item, this.player.equippedArmor, 'Броня');
+    }
+
+    return result.trim();
+  }
+
+  /**
+   * Сравнивает два предмета экипировки.
+   * @param {object} newItem - Новый предмет.
+   * @param {object} equippedItem - Надетый предмет.
+   * @param {string} itemTypeName - Название типа предмета (Оружие/Броня).
+   * @returns {string}
+   * @private
+   */
+  _compareEquipment(newItem, equippedItem, itemTypeName) {
+    if (!equippedItem) {
+      return `\nУ вас не надето: ${itemTypeName}.`;
+    }
+
+    let comparison = `\nСравнение с надетым (${this.colorize(equippedItem.name, 'item-name')}):\n`;
+    let better = 0;
+    let worse = 0;
+    
+    const compareStat = (name, newItemStat, equippedItemStat, lowerIsBetter = false) => {
+      if (newItemStat === equippedItemStat) return `  ${name}: ${newItemStat.toFixed(1)} (=)\n`;
+      
+      const isBetter = lowerIsBetter ? newItemStat < equippedItemStat : newItemStat > equippedItemStat;
+      const diff = newItemStat - equippedItemStat;
+      const diffStr = diff > 0 ? `+${diff.toFixed(1)}` : `${diff.toFixed(1)}`;
+
+      if (isBetter) {
+        better++;
+        return `  ${name}: ${newItemStat.toFixed(1)} (${this.colorize(diffStr, 'combat-exp-gain')})\n`;
+      } else {
+        worse++;
+        return `  ${name}: ${newItemStat.toFixed(1)} (${this.colorize(diffStr, 'combat-npc-death')})\n`;
+      }
+    };
+
+    if (newItem.type === 'weapon') {
+      const newItemDamage = this._parseDamageString(newItem.damage).avg;
+      const equippedItemDamage = this._parseDamageString(equippedItem.damage).avg;
+      comparison += compareStat('Средний урон', newItemDamage, equippedItemDamage);
+    }
+    
+    if (newItem.type === 'armor') {
+      comparison += compareStat('Защита', newItem.armor || 0, equippedItem.armor || 0);
+    }
+
+    comparison += compareStat('Вес', newItem.weight || 0, equippedItem.weight || 0, true);
+    comparison += compareStat('Ценность', newItem.value || 0, equippedItem.value || 0);
+
+    if (better > worse) {
+      comparison += `\nВ целом, это ${this.colorize('лучше', 'combat-exp-gain')}, чем то, что на вас надето.`;
+    } else if (worse > better) {
+      comparison += `\nВ целом, это ${this.colorize('хуже', 'combat-npc-death')}, чем то, что на вас надето.`;
+    } else {
+      comparison += `\nВ целом, они примерно одинаковы.`;
+    }
+
+    return comparison;
+  }
+
+  /**
    * Команда: equip - экипировка предмета
    */
   cmdEquip(cmd) {
@@ -1064,6 +1188,74 @@ export class GameEngine {
     return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Спасибо за ${this.colorize(item.name, 'item-name')}! Вот вам ${sellPrice} золота." (В этой версии золото пока не реализовано)`;
   }
 
+  /**
+   * Оценивает шансы на победу в бою с NPC.
+   * @param {NPC} npc - Противник.
+   * @returns {string}
+   * @private
+   */
+  _getConsiderNpcString(npc) {
+    let result = `Вы оцениваете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.\n`;
+    result += `${npc.description}\n\n`;
+
+    const playerHp = this.player.hitPoints;
+    const playerAvgDamage = this._calculateAvgPlayerDamage();
+    
+    const npcHp = npc.hitPoints;
+    const npcAvgDamage = this._parseDamageString(npc.damage).avg;
+
+    // Избегаем деления на ноль
+    if (playerAvgDamage <= 0) {
+        return result + `Оценка сил: Вы не можете нанести урон.`;
+    }
+    if (npcAvgDamage <= 0) {
+        return result + `Оценка сил: Противник не может нанести урон. Легкая победа.`;
+    }
+
+    const roundsToKillNpc = Math.ceil(npcHp / playerAvgDamage);
+    const roundsToKillPlayer = Math.ceil(playerHp / npcAvgDamage);
+
+    let conclusion = '';
+    const ratio = roundsToKillPlayer / roundsToKillNpc;
+
+    if (ratio > 2.5) {
+      conclusion = 'Это будет легкая победа.';
+    } else if (ratio > 1.5) {
+      conclusion = 'Вы, скорее всего, победите, но можете получить урон.';
+    } else if (ratio >= 0.9) {
+      conclusion = 'Бой будет очень тяжелым. Шансы примерно равны.';
+    } else if (ratio > 0.6) {
+      conclusion = 'Это очень опасный противник. Скорее всего, вы проиграете.';
+    } else {
+      conclusion = 'Бегите! У вас нет шансов.';
+    }
+
+    result += `Оценка сил: ${this.colorize(conclusion, 'combat-player-attack')}`;
+    return result;
+  }
+
+  /**
+   * Рассчитывает средний урон игрока.
+   * @returns {number}
+   * @private
+   */
+  _calculateAvgPlayerDamage() {
+    // Базовый урон 1d6 без оружия
+    let avgDamage = 3.5;
+    
+    // Бонус от силы
+    const strBonus = Math.floor((this.player.strength - 10) / 2);
+    
+    // Бонус от оружия
+    if (this.player.equippedWeapon && this.player.equippedWeapon.damage) {
+      avgDamage = this._parseDamageString(this.player.equippedWeapon.damage).avg + strBonus;
+    } else {
+      avgDamage += strBonus;
+    }
+    
+    return Math.max(1, avgDamage);
+  }
+
   // Вспомогательные методы
 
   /**
@@ -1112,6 +1304,30 @@ export class GameEngine {
   _parseGlobalId(globalId) {
     const parts = globalId.split(':');
     return [parts[0], parts.slice(1).join(':')];
+  }
+  /**
+   * Разбирает строку урона (например, "1d6+2") и возвращает среднее и максимальное значение.
+   * @param {string} damageString - Строка урона.
+   * @returns {{avg: number, max: number}}
+   * @private
+   */
+  _parseDamageString(damageString) {
+    if (!damageString) return { avg: 0, max: 0 };
+    // Регулярное выражение для разбора строки: (количество кубиков)d(размер кубика)+/-(модификатор)
+    const match = damageString.match(/(\d+)d(\d+)(?:([+-])(\d+))?/);
+    if (!match) {
+      return { avg: 1, max: 1 };
+    }
+    
+    const [, diceCountStr, diceSizeStr, operator, modifierStr] = match;
+    const diceCount = parseInt(diceCountStr);
+    const diceSize = parseInt(diceSizeStr);
+    const modifier = (operator && modifierStr) ? (operator === '+' ? parseInt(modifierStr) : -parseInt(modifierStr)) : 0;
+    
+    const avg = diceCount * (diceSize / 2 + 0.5) + modifier;
+    const max = diceCount * diceSize + modifier;
+
+    return { avg, max };
   }
   /**
    * Сохранение игры в localStorage
@@ -1226,6 +1442,10 @@ ${this.getCurrentRoom().getFullDescription(this, startAreaId)}
   async moveToRoom(targetRoomId) {
     if (this.player.state === 'fighting') {
       return { success: false, message: 'Вы не можете уйти во время боя!' };
+    }
+
+    if (this.player.state === 'dead') {
+      return { success: false, message: 'Вы мертвы и не можете двигаться.' };
     }
 
     const currentRoom = this.getCurrentRoom();

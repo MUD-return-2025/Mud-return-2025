@@ -62,7 +62,8 @@ export class CommandParser {
       'справка': 'help',
       // Добавлен алиас для побега из боя
       'сбежать': 'flee',
-      'возродиться': 'respawn'
+      'возродиться': 'respawn',
+      'con': 'consider'
     };
 
     // Заполняем Map алиасов

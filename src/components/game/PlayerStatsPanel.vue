@@ -209,6 +209,7 @@ const isRoomAvailable = (localRoomId) => {
  */
 const isRoomClickable = (localRoomId) => {
   if (!props.gameStarted) return false;
+  if (props.player.state === 'dead') return false;
   return localRoomId !== currentLocalRoomId.value && isRoomAvailable(localRoomId);
 };
 
@@ -501,6 +502,9 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
                 <button @click="$emit('command', 'look ' + npc.name)">
                   👁️ Осмотреть {{ npc.name }}
                 </button>
+                <button @click="$emit('command', 'consider ' + npc.name)">
+                  🤔 Оценить {{ npc.name }}
+                </button>
                 <button @click="$emit('command', 'talk ' + npc.name)">
                   💬 Поговорить с {{ npc.name }}
                 </button>
@@ -512,6 +516,9 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
               <template v-for="item in itemsInRoom" :key="item.id">
                 <button @click="$emit('command', 'look ' + item.name)">
                   👁️ Осмотреть {{ item.name }}
+                </button>
+                <button @click="$emit('command', 'consider ' + item.name)">
+                  🤔 Оценить {{ item.name }}
                 </button>
                 <button @click="$emit('command', 'get ' + item.name)">
                   ✋ Взять {{ item.name }}
@@ -530,7 +537,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
   position: fixed;
   top: 20px;
   right: 20px;
-  width: 320px;
+  width: 400px;
   max-height: calc(100vh - 40px);
   background-color: #001100;
   border: 2px solid #00ff00;
