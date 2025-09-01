@@ -202,6 +202,11 @@ export class Player {
       return `${weapon.name} не является оружием.`;
     }
 
+    // Проверяем, достаточно ли места для старого оружия, если оно есть
+    if (this.equippedWeapon && !this.canCarry(this.equippedWeapon)) {
+      return `Вы не можете экипировать ${weapon.name}, так как в инвентаре не хватит места для ${this.equippedWeapon.name}.`;
+    }
+
     // Если уже есть экипированное оружие, возвращаем его в инвентарь.
     let result = '';
     if (this.equippedWeapon) {
@@ -226,6 +231,11 @@ export class Player {
       return `${armor.name} не является броней.`;
     }
 
+    // Проверяем, достаточно ли места для старой брони, если она есть
+    if (this.equippedArmor && !this.canCarry(this.equippedArmor)) {
+      return `Вы не можете экипировать ${armor.name}, так как в инвентаре не хватит места для ${this.equippedArmor.name}.`;
+    }
+
     // Аналогично оружию, возвращаем старую броню в инвентарь.
     let result = '';
     if (this.equippedArmor) {
@@ -248,6 +258,10 @@ export class Player {
       return 'У вас нет экипированного оружия.';
     }
 
+    if (!this.canCarry(this.equippedWeapon)) {
+      return `Вы не можете снять ${this.equippedWeapon.name}, в инвентаре нет места.`;
+    }
+
     this.addItem(this.equippedWeapon);
     const weaponName = this.equippedWeapon.name;
     this.equippedWeapon = null;
@@ -263,6 +277,10 @@ export class Player {
       return 'У вас нет экипированной брони.';
     }
 
+    if (!this.canCarry(this.equippedArmor)) {
+      return `Вы не можете снять ${this.equippedArmor.name}, в инвентаре нет места.`;
+    }
+
     this.addItem(this.equippedArmor);
     const armorName = this.equippedArmor.name;
     this.equippedArmor = null;
@@ -274,7 +292,7 @@ export class Player {
    * Примечание: этот метод возвращает полный урон оружия, а не только бонус.
    * @returns {number} Итоговый урон от оружия.
    */
-  getWeaponDamageBonus() {
+  rollWeaponDamage() {
     if (!this.equippedWeapon) {
       return 0;
     }
@@ -282,7 +300,7 @@ export class Player {
     // Парсим урон оружия (например "1d6+1")
     const match = this.equippedWeapon.damage?.match(/(\d+)d(\d+)(?:([+-])(\d+))?/);
     if (!match) {
-      return 2; // Базовый бонус, если урон не указан.
+      return 1; // Базовый урон, если не указан.
     }
     
     const [, diceCount, diceSize, operator, modifier] = match;

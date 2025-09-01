@@ -761,17 +761,19 @@ export class GameEngine {
    * @returns {number} урон
    */
   calculatePlayerDamage() {
-    let baseDamage = Math.floor(Math.random() * 6) + 1; // 1d6
+    let baseDamage;
+    
+    // Урон от оружия или кулаков (1d4)
+    if (this.player.equippedWeapon) {
+      baseDamage = this.player.rollWeaponDamage();
+    } else {
+      baseDamage = Math.floor(Math.random() * 4) + 1;
+    }
     
     // Бонус от силы
     const strBonus = Math.floor((this.player.strength - 10) / 2);
-    baseDamage += strBonus;
-    
-    // Бонус от экипированного оружия
-    const weaponBonus = this.player.getWeaponDamageBonus();
-    baseDamage += weaponBonus;
-    
-    return Math.max(1, baseDamage);
+
+    return Math.max(1, baseDamage + strBonus);
   }
 
   /**

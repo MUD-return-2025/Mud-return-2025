@@ -169,19 +169,20 @@ const processCommand = async () => {
   historyIndex.value = commandHistory.value.length;
 
   if (!gameStarted.value) {
+    const [command, ...args] = input.split(/\s+/);
     // Обработка команд до начала игры (new/load)
-    if (input.toLowerCase() === 'new') {
-      const welcomeMsg = await gameEngine.startNewGame();
+    if (command.toLowerCase() === 'new') {
+      const playerName = args.length > 0 ? args.join(' ') : undefined;
+      const welcomeMsg = await gameEngine.startNewGame(playerName);
       gameMessages.value = welcomeMsg.split('\n');
       gameStarted.value = true;
       Object.assign(player, gameEngine.player);
-    } else if (input.toLowerCase() === 'load') {
+    } else if (command.toLowerCase() === 'load') {
       const loaded = await gameEngine.loadGame();
       if (loaded) {
         gameMessages.value.push('Игра загружена!');
         const currentRoom = gameEngine.getCurrentRoom();
-        const [areaId] = gameEngine._parseGlobalId(player.currentRoom);
-        gameMessages.value.push('', currentRoom.getFullDescription(gameEngine, areaId));
+        gameMessages.value.push('', currentRoom.getFullDescription(gameEngine));
         gameStarted.value = true;
         Object.assign(player, gameEngine.player);
       } else {
