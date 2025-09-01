@@ -264,9 +264,8 @@ const itemsInRoom = computed(() => {
   if (!currentRoom.value) return [];
   // eslint-disable-next-line no-unused-expressions
   props.updateCounter; // Принудительная реактивность при обновлении из движка
-  const areaId = currentRoom.value.area;
   return currentRoom.value.items
-    .map(itemId => props.gameEngine.getItem(itemId, areaId))
+    .map(globalItemId => props.gameEngine.items.get(globalItemId))
     .filter(Boolean);
 });
 
@@ -274,6 +273,22 @@ const itemsInRoom = computed(() => {
 const hasTrader = computed(() => npcsInRoom.value.some(npc => npc.canTrade && npc.canTrade()));
 /** @description Вычисляемое свойство, проверяющее, есть ли целитель в комнате. */
 const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
+
+/** @description Вычисляемое свойство, возвращающее NPC-торговца в текущей комнате. */
+const traderInRoom = computed(() => {
+  if (!hasTrader.value) return null;
+  return npcsInRoom.value.find(npc => npc.canTrade && npc.canTrade());
+});
+
+/** @description Вычисляемое свойство, возвращающее список товаров торговца. */
+const traderItems = computed(() => {
+  if (!traderInRoom.value) return [];
+  const areaId = currentRoom.value.area;
+  const shopItemIds = traderInRoom.value.getShopItems();
+  return shopItemIds
+    .map(itemId => props.gameEngine.getItem(itemId, areaId))
+    .filter(Boolean);
+});
 </script>
 
 <template>
@@ -362,14 +377,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
             <p>{{ selectedItem.description }}</p>
             <div class="item-actions">
               <button 
-                v-if="selectedItem.type === 'weapon'" 
-                @click="handleItemAction('equip ' + selectedItem.name)"
-                class="action-btn"
-              >
-                Экипировать
-              </button>
-              <button 
-                v-if="selectedItem.type === 'armor'" 
+                v-if="selectedItem.type === 'weapon' || selectedItem.type === 'armor'"
                 @click="handleItemAction('equip ' + selectedItem.name)"
                 class="action-btn"
               >
@@ -382,12 +390,55 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
               >
                 Использовать
               </button>
+              <button
+                @click="handleItemAction('look ' + selectedItem.name)"
+                class="action-btn"
+              >
+                Осмотреть
+              </button>
+              <button
+                @click="handleItemAction('consider ' + selectedItem.name)"
+                class="action-btn"
+              >
+                Оценить
+              </button>
+              <button v-if="hasTrader" @click="handleItemAction('sell ' + selectedItem.name)" class="action-btn">
+                Продать
+              </button>
               <button 
                 @click="handleItemAction('drop ' + selectedItem.name)"
                 class="action-btn danger"
               >
                 Бросить
               </button>
+            </div>
+          </div>
+
+          <!-- Секция торговли -->
+          <div v-if="hasTrader" class="trader-shop">
+            <hr class="actions-divider" />
+            <h4>Товары у {{ traderInRoom.name }}</h4>
+            <div v-if="traderItems.length === 0" class="empty-inventory">
+              Товар закончился.
+            </div>
+            <div v-else class="trader-item-list">
+              <div v-for="item in traderItems" :key="item.id" class="trader-item">
+                <div class="trader-item-info">
+                  <span class="item-name">{{ item.name }}</span>
+                  <span class="item-price">{{ item.value || 'N/A' }} з.</span>
+                </div>
+                <div class="item-actions">
+                  <button @click="handleItemAction('look ' + item.name)" class="action-btn">
+                    Осмотреть
+                  </button>
+                  <button @click="handleItemAction('consider ' + item.name)" class="action-btn">
+                    Оценить
+                  </button>
+                  <button @click="handleItemAction('buy ' + item.name)" class="action-btn">
+                    Купить
+                  </button>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -489,38 +540,42 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
           <div class="map-actions">
             <h4>Действия</h4>
             <div class="action-buttons">
-              <button @click="$emit('command', 'look')">👁️ Осмотреться</button>
-              <button @click="$emit('command', 'save')">💾 Сохранить</button>
-              <button @click="$emit('command', 'help')">❓ Помощь</button>
+              <button class="action-btn" @click="$emit('command', 'look')">👁️ Осмотреться</button>
+              <button class="action-btn" @click="$emit('command', 'save')">💾 Сохранить</button>
+              <button class="action-btn" @click="$emit('command', 'help')">❓ Помощь</button>
               
               <hr v-if="hasTrader || hasHealer || npcsInRoom.length || itemsInRoom.length" class="actions-divider" />
 
-              <button v-if="hasTrader" @click="$emit('command', 'list')">💰 Торговать</button>
-              <button v-if="hasHealer" @click="$emit('command', 'heal')">✨ Исцелиться</button>
+              <button class="action-btn" v-if="hasTrader" @click="$emit('command', 'list')">💰 Торговать</button>
+              <button class="action-btn" v-if="hasHealer" @click="$emit('command', 'heal')">✨ Исцелиться</button>
               
               <template v-for="npc in npcsInRoom" :key="npc.id">
-                <button @click="$emit('command', 'look ' + npc.name)">
+                <button class="action-btn" @click="$emit('command', 'look ' + npc.name)">
                   👁️ Осмотреть {{ npc.name }}
                 </button>
-                <button @click="$emit('command', 'consider ' + npc.name)">
+                <button class="action-btn" @click="$emit('command', 'consider ' + npc.name)">
                   🤔 Оценить {{ npc.name }}
                 </button>
-                <button @click="$emit('command', 'talk ' + npc.name)">
+                <button class="action-btn" @click="$emit('command', 'talk ' + npc.name)">
                   💬 Поговорить с {{ npc.name }}
                 </button>
-                <button v-if="npc.type === 'hostile'" @click="$emit('command', 'kill ' + npc.name)">
+                <button
+                  v-if="npc.type === 'hostile'"
+                  @click="$emit('command', 'kill ' + npc.name)"
+                  class="action-btn danger"
+                >
                   ⚔️ Убить {{ npc.name }}
                 </button>
               </template>
 
               <template v-for="item in itemsInRoom" :key="item.id">
-                <button @click="$emit('command', 'look ' + item.name)">
+                <button class="action-btn" @click="$emit('command', 'look ' + item.name)">
                   👁️ Осмотреть {{ item.name }}
                 </button>
-                <button @click="$emit('command', 'consider ' + item.name)">
+                <button class="action-btn" @click="$emit('command', 'consider ' + item.name)">
                   🤔 Оценить {{ item.name }}
                 </button>
-                <button @click="$emit('command', 'get ' + item.name)">
+                <button class="action-btn" @click="$emit('command', 'get ' + item.name)">
                   ✋ Взять {{ item.name }}
                 </button>
               </template>
@@ -746,7 +801,7 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
   border: 1px solid #00ff00;
   color: #00ff00;
   padding: 3px 6px;
-  font-size: 9px;
+  font-size: 10px;
   cursor: pointer;
   font-family: 'Courier New', monospace;
 }
@@ -757,13 +812,13 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
 }
 
 .action-btn.danger {
-  border-color: #ff0000;
-  color: #ff0000;
+  border-color: #ff4444;
+  color: #ff4444;
 }
 
 .action-btn.danger:hover {
-  background-color: #ff0000;
-  color: #fff;
+  background-color: #ff4444;
+  color: #000;
 }
 
 /* Экипировка */
@@ -928,28 +983,61 @@ const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
   gap: 8px;
 }
 
-.action-buttons button {
-  font-size: 11px;
-}
-
 .actions-divider {
   width: 100%;
   border-color: #004400;
 }
 
+.trader-shop {
+  margin-top: 15px;
+  padding-top: 10px;
+}
+
+.trader-shop h4 {
+  margin: 0 0 10px 0;
+  color: #ffff00;
+  font-size: 12px;
+}
+
+.trader-item-list {
+  max-height: 180px;
+  overflow-y: auto;
+}
+
+.trader-item {
+  padding: 8px 5px;
+  border: 1px solid #333;
+  margin: 3px 0;
+  background-color: #001a00;
+}
+
+.trader-item-info {
+  display: flex;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.item-price {
+  color: #ffff00;
+  font-size: 11px;
+}
+
 /* Прокрутка */
 .panel-content::-webkit-scrollbar,
-.inventory-list::-webkit-scrollbar {
+.inventory-list::-webkit-scrollbar,
+.trader-item-list::-webkit-scrollbar {
   width: 6px;
 }
 
 .panel-content::-webkit-scrollbar-track,
-.inventory-list::-webkit-scrollbar-track {
+.inventory-list::-webkit-scrollbar-track,
+.trader-item-list::-webkit-scrollbar-track {
   background: #001100;
 }
 
 .panel-content::-webkit-scrollbar-thumb,
-.inventory-list::-webkit-scrollbar-thumb {
+.inventory-list::-webkit-scrollbar-thumb,
+.trader-item-list::-webkit-scrollbar-thumb {
   background: #00ff00;
   border-radius: 3px;
 }

@@ -385,6 +385,45 @@ export class GameEngine {
   }
 
   /**
+   * Находит NPC-торговца в текущей комнате.
+   * @returns {import('./classes/NPC.js').NPC|null}
+   * @private
+   */
+  _getTraderInCurrentRoom() {
+    const currentRoom = this.getCurrentRoom();
+    if (!currentRoom) return null;
+
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
+    const merchantId = currentRoom.npcs.find(localNpcId => {
+      const npc = this.getNpc(localNpcId, currentAreaId);
+      return npc && npc.isAlive() && npc.canTrade && npc.canTrade();
+    });
+
+    return merchantId ? this.getNpc(merchantId, currentAreaId) : null;
+  }
+
+  /**
+   * Находит предмет в магазине торговца в текущей комнате.
+   * @param {string} targetName - Имя предмета для поиска.
+   * @returns {object|null}
+   * @private
+   */
+  _findItemInTraderShop(targetName) {
+    const trader = this._getTraderInCurrentRoom();
+    if (!trader) return null;
+
+    const traderAreaId = trader.area;
+    const shopItems = trader.getShopItems(); // Это локальные ID
+    const target = targetName.toLowerCase();
+
+    const localItemId = shopItems.find(id => {
+      const item = this.getItem(id, traderAreaId);
+      return item && (item.name.toLowerCase().includes(target) || item.id.toLowerCase().includes(target));
+    });
+
+    return localItemId ? this.getItem(localItemId, traderAreaId) : null;
+  }
+  /**
    * Команда: look - осмотр локации или предмета
    */
   cmdLook(cmd) {
@@ -394,21 +433,20 @@ export class GameEngine {
         'player-dead-look'
       );
     }
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
     
     if (!cmd.target) {
       // Осматриваем локацию
-      return currentRoom.getFullDescription(this, currentAreaId);
+      return currentRoom.getFullDescription(this);
     }
     
     // Осматриваем конкретный предмет или НПС
     const target = cmd.target.toLowerCase();
     
     // Ищем среди предметов в комнате
-    const roomItemId = currentRoom.findItem(target, this, currentAreaId);
-    if (roomItemId) {
-      const item = this.getItem(roomItemId, currentAreaId);
+    const globalItemId = currentRoom.findItem(target, this);
+    if (globalItemId) {
+      const item = this.items.get(globalItemId);
       return item.description + (item.readText ? `\n\nНа ${this.colorize(item.name, 'item-name')} написано: "${item.readText}"` : '');
     }
     
@@ -418,7 +456,15 @@ export class GameEngine {
       return inventoryItem.description;
     }
     
+    // Ищем в товарах торговца
+    const traderItem = this._findItemInTraderShop(target);
+    if (traderItem) {
+      // Используем ту же логику, что и для предмета в комнате
+      return traderItem.description + (traderItem.readText ? `\n\nНа ${this.colorize(traderItem.name, 'item-name')} написано: "${traderItem.readText}"` : '');
+    }
+
     // Ищем среди НПС
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const npcIdInRoom = currentRoom.findNpc(target, this, currentAreaId);
     if (npcIdInRoom) {
       const npc = this.getNpc(npcIdInRoom, currentAreaId);
@@ -469,10 +515,9 @@ export class GameEngine {
     
     this.player.currentRoom = targetRoomId;
     const newRoom = this.getCurrentRoom();
-    const [newAreaId, ] = this._parseGlobalId(targetRoomId);
     this.emit('update');
     
-    return `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this, newAreaId)}`;
+    return `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}`;
   }
 
   /**
@@ -483,17 +528,16 @@ export class GameEngine {
       return 'Что вы хотите взять?';
     }
     
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
     const target = cmd.target.toLowerCase();
     
     // Ищем предмет в локации
-    const itemId = currentRoom.findItem(target, this, currentAreaId);
-    if (!itemId) {
+    const globalItemId = currentRoom.findItem(target, this);
+    if (!globalItemId) {
       return `Вы не видите "${cmd.target}" здесь.`;
     }
     
-    const item = this.getItem(itemId, currentAreaId);
+    const item = this.items.get(globalItemId);
     if (!item.canTake) {
       return `Вы не можете взять ${item.name}.`;
     }
@@ -503,8 +547,8 @@ export class GameEngine {
     }
     
     // Перемещаем предмет из локации в инвентарь
-    currentRoom.removeItem(itemId);
-    this.player.addItem({ ...item, globalId: this._getGlobalId(item.id, item.area) });
+    currentRoom.removeItem(globalItemId);
+    this.player.addItem({ ...item, globalId: globalItemId });
     
     return `Вы взяли ${this.colorize(item.name, 'item-name')}.`;
   }
@@ -524,7 +568,7 @@ export class GameEngine {
     
     const currentRoom = this.getCurrentRoom();
     this.player.removeItem(item.globalId);
-    currentRoom.addItem(item.id); // В комнату добавляем локальный ID
+    currentRoom.addItem(item.globalId); // В комнату добавляем глобальный ID
     
     return `Вы бросили ${this.colorize(item.name, 'item-name')}.`;
   }
@@ -635,7 +679,8 @@ export class GameEngine {
         const [npcAreaId, ] = this._parseGlobalId(this.combatTarget);
         const currentRoom = this.getCurrentRoom();
         drops.forEach(localItemId => {
-          currentRoom.addItem(localItemId); // Добавляем локальный ID в комнату
+        const globalItemId = this._getGlobalId(localItemId, npcAreaId);
+        currentRoom.addItem(globalItemId);
         });
         result += `\n${this.colorize(npc.name, `npc-name npc-${npc.type}`)} что-то оставил.`;
       }
@@ -913,10 +958,9 @@ export class GameEngine {
     this.emit('update'); // Обновляем UI
 
     const respawnRoom = this.rooms.get(respawnRoomId);
-    const [areaId, ] = this._parseGlobalId(respawnRoomId);
 
     return this.colorize('Вы чувствуете, как жизнь возвращается в ваше тело. Мир вновь обретает краски.', 'player-respawn') + `\n\n` +
-           respawnRoom.getFullDescription(this, areaId);
+           respawnRoom.getFullDescription(this);
   }
 
   /**
@@ -928,7 +972,6 @@ export class GameEngine {
     }
 
     const target = cmd.target.toLowerCase();
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const currentRoom = this.getCurrentRoom();
 
     // 1. Проверяем предмет в инвентаре
@@ -938,13 +981,20 @@ export class GameEngine {
     }
 
     // 2. Проверяем предмет в комнате
-    const roomItemId = currentRoom.findItem(target, this, currentAreaId);
-    if (roomItemId) {
-      item = this.getItem(roomItemId, currentAreaId);
+    const globalItemId = currentRoom.findItem(target, this);
+    if (globalItemId) {
+      item = this.items.get(globalItemId);
+      return this._getConsiderItemString(item);
+    }
+
+    // 2.5. Проверяем предмет у торговца
+    item = this._findItemInTraderShop(target);
+    if (item) {
       return this._getConsiderItemString(item);
     }
 
     // 3. Проверяем NPC в комнате
+    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const npcId = currentRoom.findNpc(target, this, currentAreaId);
     if (npcId) {
       const npc = this.getNpc(npcId, currentAreaId);
@@ -1082,18 +1132,11 @@ export class GameEngine {
    * Команда: list - просмотр товаров торговца
    */
   cmdList() {
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-    const currentRoom = this.getCurrentRoom();
-    const merchantId = currentRoom.npcs.find(localNpcId => {
-      const npc = this.getNpc(localNpcId, currentAreaId);
-      return npc && npc.canTrade && npc.canTrade();
-    });
-
-    if (!merchantId) {
+    const npc = this._getTraderInCurrentRoom();
+    if (!npc) {
       return 'Здесь нет торговцев.';
     }
 
-    const npc = this.getNpc(merchantId, currentAreaId);
     const shopItems = npc.getShopItems();
     
     if (shopItems.length === 0) {
@@ -1102,7 +1145,7 @@ export class GameEngine {
 
     let result = `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} предлагает:\n`;
     shopItems.forEach((localItemId, index) => {
-      const item = this.getItem(localItemId, currentAreaId);
+      const item = this.getItem(localItemId, npc.area);
       if (item) {
         result += `${index + 1}. ${this.colorize(item.name, 'item-name')} - ${item.value || 'N/A'} золота\n`;
       }
@@ -1120,24 +1163,17 @@ export class GameEngine {
       return 'Что вы хотите купить?';
     }
 
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-    const currentRoom = this.getCurrentRoom();
-    const merchantId = currentRoom.npcs.find(localNpcId => {
-      const npc = this.getNpc(localNpcId, currentAreaId);
-      return npc && npc.canTrade && npc.canTrade();
-    });
-
-    if (!merchantId) {
+    const npc = this._getTraderInCurrentRoom();
+    if (!npc) {
       return 'Здесь нет торговцев.';
     }
 
-    const npc = this.getNpc(merchantId, currentAreaId);
     const shopItems = npc.getShopItems();
     const target = cmd.target.toLowerCase();
 
     // Ищем товар в магазине
     const localItemId = shopItems.find(id => {
-      const item = this.getItem(id, currentAreaId);
+      const item = this.getItem(id, npc.area);
       return item && item.name.toLowerCase().includes(target);
     });
 
@@ -1145,7 +1181,7 @@ export class GameEngine {
       return `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} говорит: "У меня нет такого товара."`;
     }
 
-    const item = this.getItem(localItemId, currentAreaId);
+    const item = this.getItem(localItemId, npc.area);
     
     // Проверяем, может ли игрок нести предмет
     if (!this.player.canCarry(item, this)) {
@@ -1401,10 +1437,9 @@ export class GameEngine {
     
     // Начинаем в центре города
     this.player.currentRoom = 'midgard:center';
-    const [startAreaId, ] = this._parseGlobalId(this.player.currentRoom);
     const welcomeMessage = `Добро пожаловать в Мидгард, ${playerName}!
 
-${this.getCurrentRoom().getFullDescription(this, startAreaId)}
+${this.getCurrentRoom().getFullDescription(this)}
 
 Введите 'help' для получения списка команд.`;
 

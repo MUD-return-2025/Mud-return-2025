@@ -207,8 +207,10 @@ onMounted(() => {
   // Это позволяет UI реагировать на изменения состояния игрока (HP, статы и т.д.).
   gameEngine.on('update', () => {
     // Обновляем реактивный объект игрока, чтобы UI (панель статистики) перерисовался.
-    Object.assign(player, gameEngine.player);
-    // Увеличиваем счетчик, чтобы дочерние компоненты (PlayerStatsPanel) тоже обновились.
+    const newPlayerState = { ...gameEngine.player };
+    // Принудительно создаем новый массив инвентаря, чтобы Vue точно отследил изменения
+    newPlayerState.inventory = [...gameEngine.player.inventory];
+    Object.assign(player, newPlayerState);
     updateCounter.value++;
   });
 
