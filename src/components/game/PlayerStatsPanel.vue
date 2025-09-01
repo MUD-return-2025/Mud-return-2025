@@ -289,6 +289,19 @@ const traderItems = computed(() => {
     .map(itemId => props.gameEngine.getItem(itemId, areaId))
     .filter(Boolean);
 });
+
+/** @description Вычисляемое свойство, возвращающее список изученных умений. */
+const learnedSkills = computed(() => {
+  if (!props.gameEngine.skillsData.size) return [];
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter; // Принудительная реактивность
+  return Array.from(props.player.skills)
+    .map(skillId => {
+      const skill = props.gameEngine.skillsData.get(skillId);
+      return skill ? { ...skill, id: skillId } : null;
+    })
+    .filter(Boolean);
+});
 </script>
 
 <template>
@@ -346,6 +359,16 @@ const traderItems = computed(() => {
             <div class="stat-line">🧠 Интеллект: {{ player.intelligence }}</div>
             <div class="stat-line">🔮 Мудрость: {{ player.wisdom }}</div>
             <div class="stat-line">😊 Харизма: {{ player.charisma }}</div>
+          </div>
+
+          <div v-if="learnedSkills.length > 0" class="stat-group">
+            <h4>📚 Умения</h4>
+            <div v-for="skill in learnedSkills" :key="skill.id" class="skill-item" :title="skill.description">
+              <span class="skill-name">{{ skill.name }}</span>
+              <button class="action-btn" @click="$emit('command', 'kick')">
+                Пнуть
+              </button>
+            </div>
           </div>
         </div>
 
@@ -820,6 +843,20 @@ const traderItems = computed(() => {
   background-color: #ff4444;
   color: #000;
 }
+
+.skill-item {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 4px 0;
+  font-size: 11px;
+}
+
+.skill-name {
+  color: #00ff00;
+  font-weight: bold;
+}
+
 
 /* Экипировка */
 .equipment-slot {

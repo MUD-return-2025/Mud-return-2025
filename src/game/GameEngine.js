@@ -26,6 +26,7 @@ export class GameEngine {
     this.items = new Map(); // Карта предметов, ключ - глобальный ID
     this.npcs = new Map(); // Карта NPC, ключ - глобальный ID
     this.areas = new Map(); // Карта метаданных загруженных зон
+    this.skillsData = new Map(); // Карта умений, ключ - ID умения
     this.loadedAreaIds = new Set(); // Набор ID уже загруженных зон
 
     this.messageHistory = []; // История сообщений для вывода в терминал
@@ -70,6 +71,25 @@ export class GameEngine {
    */
   async initializeWorld() {
     await this.loadArea('midgard');
+    await this.initializeSkills();
+  }
+
+  /**
+   * Загружает данные об умениях из JSON файла.
+   */
+  async initializeSkills() {
+    try {
+      const response = await fetch(`/src/game/data/skills.json`);
+      if (!response.ok) {
+        throw new Error(`Не удалось загрузить умения.`);
+      }
+      const skillsData = await response.json();
+      for (const [id, data] of Object.entries(skillsData)) {
+        this.skillsData.set(id, { id, ...data });
+      }
+    } catch (error) {
+      console.error('Ошибка при загрузке умений:', error);
+    }
   }
 
   /**
@@ -154,6 +174,11 @@ export class GameEngine {
       ['убить', 'атаковать']
     );
     
+    this.commandParser.registerCommand('kick', this.cmdKick.bind(this),
+      'пнуть противника',
+      ['пнуть']
+    );
+
     this.commandParser.registerCommand('say', this.cmdSay.bind(this), 
       'поговорить с НПС', 
       ['говорить', 'сказать']
@@ -233,6 +258,11 @@ export class GameEngine {
       'оценить предмет или противника',
       ['con', 'consider']
     );
+
+    this.commandParser.registerCommand('gain', this.cmdGain.bind(this),
+      'увеличить характеристику для отладки (gain <стат> <число>)',
+      ['получить']
+    );
   }
 
   /**
@@ -248,7 +278,7 @@ export class GameEngine {
     }
 
     // Проверка на доступные команды во время боя
-    const allowedCombatCommands = ['flee', 'look', 'inventory', 'stats', 'use'];
+    const allowedCombatCommands = ['flee', 'look', 'inventory', 'stats', 'use', 'kick'];
     if (this.player.state === 'fighting' && !allowedCombatCommands.includes(parsed.command)) {
       return 'Вы не можете сделать это в бою! Попробуйте `flee` (сбежать).';
     }
@@ -645,6 +675,32 @@ export class GameEngine {
     return ''; // Все сообщения теперь обрабатываются через события
   }
 
+  cmdKick(cmd) {
+    if (!this.player.hasSkill('kick')) {
+      return "Вы не знаете этого умения.";
+    }
+
+    if (this.player.state !== 'fighting') {
+      if (!cmd.target) {
+        return 'Кого вы хотите пнуть?';
+      }
+      // Начать бой с пинка
+      this.player.nextAttackIsSkill = 'kick';
+      // cmdKill обработает начало боя
+      return this.cmdKill(cmd);
+    }
+
+    // В бою
+    if (this.player.skillUsedThisRound) {
+      return "Вы уже использовали умение в этом раунде.";
+    }
+
+    this.player.nextAttackIsSkill = 'kick';
+    this.player.skillUsedThisRound = true; // Умение будет использовано в следующем тике атаки игрока
+    const npc = this.npcs.get(this.combatTarget);
+    return `Вы готовитесь пнуть ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`;
+  }
+
   /**
    * Выполняет раунд боя
    * @returns {string} результат боевого раунда
@@ -655,12 +711,24 @@ export class GameEngine {
       this.stopCombat();
       return 'Цель уже повержена.';
     }
+
+    // Сбрасываем флаг использования умения в начале каждого раунда
+    this.player.skillUsedThisRound = false;
+
     let result = '';
 
     // --- Ход игрока ---
-    const playerDamage = this.calculatePlayerDamage();
+    const usedSkillId = this.player.nextAttackIsSkill;
+    const playerDamage = this.calculatePlayerDamage(usedSkillId);
+    this.player.nextAttackIsSkill = null; // Сбрасываем умение после расчета урона
+
+    let attackMessage = 'Вы наносите';
+    if (usedSkillId) {
+      const skillData = this.skillsData.get(usedSkillId);
+      attackMessage = `Вы используете "${skillData.name}" и наносите`;
+    }
     const npcAlive = npc.takeDamage(playerDamage);
-    result += ' \n' + this.colorize(`Вы наносите ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack');
+    result += ' \n' + this.colorize(`${attackMessage} ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack');
     
     if (!npcAlive) {
       // НПС умер от атаки игрока
@@ -671,6 +739,10 @@ export class GameEngine {
         result += '\n' + this.colorize(`Вы получили ${npc.experience} опыта.`, 'combat-exp-gain');
         if (levelUpMessage) {
           result += '\n' + this.colorize(levelUpMessage.message, 'combat-exp-gain');
+          const newSkillMessage = this.checkAndAwardSkills();
+          if (newSkillMessage) {
+            result += '\n' + this.colorize(newSkillMessage, 'combat-exp-gain');
+          }
         }
       }
       
@@ -752,15 +824,18 @@ export class GameEngine {
     if (this.player.state !== 'dead') {
       this.player.state = 'idle';
     }
+    this.player.nextAttackIsSkill = null;
+    this.player.skillUsedThisRound = false;
     this.combatTarget = null;
     this.emit('update');
   }
 
   /**
    * Вычисляет урон игрока
+   * @param {string|null} skillId - ID используемого умения.
    * @returns {number} урон
    */
-  calculatePlayerDamage() {
+  calculatePlayerDamage(skillId = null) {
     let baseDamage;
     
     // Урон от оружия или кулаков (1d4)
@@ -773,7 +848,17 @@ export class GameEngine {
     // Бонус от силы
     const strBonus = Math.floor((this.player.strength - 10) / 2);
 
-    return Math.max(1, baseDamage + strBonus);
+    let finalDamage = baseDamage + strBonus;
+
+    // Применяем модификатор от умения
+    if (skillId) {
+      const skillData = this.skillsData.get(skillId);
+      if (skillData && skillData.damageMultiplier) {
+        finalDamage *= skillData.damageMultiplier;
+      }
+    }
+
+    return Math.max(1, Math.floor(finalDamage));
   }
 
   /**
@@ -966,6 +1051,22 @@ export class GameEngine {
   }
 
   /**
+   * Проверяет и выдает игроку новые умения при повышении уровня.
+   * @returns {string} Сообщение о новых умениях.
+   */
+  checkAndAwardSkills() {
+    let message = '';
+    for (const [skillId, skillData] of this.skillsData.entries()) {
+      if (this.player.level >= skillData.level && !this.player.hasSkill(skillId)) {
+        this.player.skills.add(skillId);
+        message += `\nВы изучили новое умение: ${this.colorize(skillData.name, 'combat-exp-gain')}!`;
+      }
+    }
+    this.emit('update');
+    return message.trim();
+  }
+
+  /**
    * Команда: consider - оценка предмета или NPC
    */
   cmdConsider(cmd) {
@@ -1004,6 +1105,100 @@ export class GameEngine {
     }
 
     return `Вы не видите "${cmd.target}" здесь.`;
+  }
+
+  /**
+   * Команда: gain - для отладки, увеличивает характеристику
+   */
+  cmdGain(cmd) {
+    if (!cmd.target) {
+      return 'Использование: gain <характеристика> <число>';
+    }
+
+    const args = cmd.target.split(/\s+/);
+    if (args.length < 2) {
+      return 'Использование: gain <характеристика> <число>';
+    }
+
+    const statName = args[0].toLowerCase();
+    const amount = parseInt(args[1], 10);
+
+    if (isNaN(amount)) {
+      return 'Неверное число.';
+    }
+
+    const statMap = {
+      'сила': 'strength', 'str': 'strength',
+      'ловкость': 'dexterity', 'dex': 'dexterity',
+      'телосложение': 'constitution', 'con': 'constitution',
+      'интеллект': 'intelligence', 'int': 'intelligence',
+      'мудрость': 'wisdom', 'wis': 'wisdom',
+      'харизма': 'charisma', 'cha': 'charisma',
+      'здоровье': 'hitPoints', 'hp': 'hitPoints', 'хп': 'hitPoints',
+      'максхп': 'maxHitPoints', 'maxhp': 'maxHitPoints',
+      'уровень': 'level', 'lvl': 'level', 'лвл': 'level',
+      'опыт': 'experience', 'exp': 'experience',
+    };
+
+    const propName = statMap[statName];
+
+    if (!propName) {
+      return `Неизвестная характеристика: "${statName}".\nДоступные: ${Object.keys(statMap).join(', ')}.`;
+    }
+
+    const p = this.player;
+    let message = '';
+
+    switch (propName) {
+      case 'experience': {
+        const levelUpMessage = p.addExperience(amount);
+        message = `Вы получили ${amount} опыта.`;
+        if (levelUpMessage) {
+          message += `\n${levelUpMessage.message}`;
+          const newSkillMessage = this.checkAndAwardSkills();
+          if (newSkillMessage) {
+            message += `\n${newSkillMessage}`;
+          }
+        }
+        break;
+      }
+      case 'level': {
+        if (amount > 0) {
+          for (let i = 0; i < amount; i++) {
+            const levelUpMessage = p.levelUp();
+            message += (message ? '\n' : '') + levelUpMessage.message;
+          }
+          const newSkillMessage = this.checkAndAwardSkills();
+          if (newSkillMessage) {
+            message += `\n${newSkillMessage}`;
+          }
+        } else {
+          p.level = Math.max(1, p.level + amount);
+        }
+        if (!message) message = `Уровень изменен на ${amount}.`;
+        break;
+      }
+      case 'hitPoints': {
+        const oldHp = p.hitPoints;
+        p.hitPoints = Math.max(0, Math.min(p.maxHitPoints, p.hitPoints + amount));
+        const change = p.hitPoints - oldHp;
+        message = `Здоровье изменено на ${change >= 0 ? '+' : ''}${change}. Текущее здоровье: ${p.hitPoints}/${p.maxHitPoints}.`;
+        break;
+      }
+      case 'maxHitPoints':
+        p.maxHitPoints += amount;
+        p.hitPoints = Math.min(p.hitPoints, p.maxHitPoints); // Don't exceed new max
+        message = `Максимальное здоровье изменено на ${amount}. Текущее здоровье: ${p.hitPoints}/${p.maxHitPoints}.`;
+        break;
+      default:
+        // For strength, dexterity, etc.
+        p[propName] += amount;
+        message = `${this.colorize(Object.keys(statMap).find(key => statMap[key] === propName), 'item-name')} увеличена на ${amount}. Новое значение: ${p[propName]}.`;
+        break;
+    }
+
+    this.emit('update');
+    return message;
   }
 
   /**
@@ -1390,6 +1585,7 @@ export class GameEngine {
         state: this.player.state,
         equippedWeapon: this.player.equippedWeapon,
         equippedArmor: this.player.equippedArmor,
+        skills: Array.from(this.player.skills),
         ui_version: this.player.ui_version || 0
       },
       loadedAreaIds: Array.from(this.loadedAreaIds),
@@ -1435,6 +1631,7 @@ export class GameEngine {
   async startNewGame(playerName = 'Игрок') {
     await this.initializeWorld();
     this.player = new Player(playerName);
+    this.checkAndAwardSkills(); // Проверяем умения на 1 уровне
     this.gameState = 'playing';
     
     // Начинаем в центре города

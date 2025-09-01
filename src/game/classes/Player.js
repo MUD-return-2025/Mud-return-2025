@@ -40,6 +40,12 @@ export class Player {
     this.equippedWeapon = null;
     /** @type {object|null} Экипированная броня. */
     this.equippedArmor = null;
+    /** @type {Set<string>} Набор ID изученных умений. */
+    this.skills = new Set();
+    /** @type {string|null} Умение, которое будет использовано в следующей атаке. */
+    this.nextAttackIsSkill = null;
+    /** @type {boolean} Использовал ли игрок умение в текущем раунде боя. */
+    this.skillUsedThisRound = false;
   }
 
   /**
@@ -128,6 +134,15 @@ export class Player {
   }
 
   /**
+   * Проверяет, изучено ли умение.
+   * @param {string} skillId - ID умения.
+   * @returns {boolean}
+   */
+  hasSkill(skillId) {
+    return this.skills.has(skillId);
+  }
+
+  /**
    * Находит предмет в инвентаре по его имени или ID.
    * @param {string} itemName - Название или ID предмета для поиска (может быть частичным).
    * @returns {object|undefined} Найденный предмет или undefined.
@@ -160,7 +175,8 @@ export class Player {
       charisma: this.charisma,
       inventory: this.inventory,
       currentRoom: this.currentRoom,
-      state: this.state
+      state: this.state,
+      skills: Array.from(this.skills)
     };
     
     localStorage.setItem('mudgame_player', JSON.stringify(playerData));
@@ -172,6 +188,8 @@ export class Player {
    */
   load(data) {
     Object.assign(this, data);
+    // Убедимся, что skills - это Set
+    this.skills = new Set(data.skills || []);
   }
 
   /**

@@ -1,0 +1,9 @@
+{
+  "kick": {
+    "name": "Пнуть",
+    "level": 2,
+    "description": "Мощный пинок, наносящий двойной урон.",
+    "damageMultiplier": 2
+  }
+}
+
