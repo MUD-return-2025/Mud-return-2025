@@ -46,6 +46,8 @@ export class Player {
     this.nextAttackIsSkill = null;
     /** @type {boolean} Использовал ли игрок умение в текущем раунде боя. */
     this.skillUsedThisRound = false;
+    /** @type {string|null} Глобальный ID комнаты, где игрок умер. */
+    this.deathRoom = null;
   }
 
   /**
@@ -108,6 +110,7 @@ export class Player {
     this.hitPoints = Math.max(0, this.hitPoints - damage);
     if (this.hitPoints === 0) {
       this.state = 'dead';
+      this.deathRoom = this.currentRoom;
     }
     return this.hitPoints;
   }

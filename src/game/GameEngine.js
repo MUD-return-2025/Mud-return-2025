@@ -1029,7 +1029,7 @@ export class GameEngine {
   /**
    * Команда: respawn - возрождение игрока
    */
-  cmdRespawn() {
+  cmdRespawn(cmd) {
     if (this.player.state !== 'dead') {
       return 'Вы и так живы.';
     }
@@ -1038,8 +1038,13 @@ export class GameEngine {
     this.player.hitPoints = this.player.maxHitPoints;
     this.player.state = 'idle';
 
-    // Перемещаем в стартовую локацию (хардкод для простоты)
-    const respawnRoomId = 'midgard:center';
+    // Перемещаем в стартовую локацию или в место смерти
+    let respawnRoomId;
+    if ((cmd.target === 'here' || cmd.target === 'здесь') && this.player.deathRoom) {
+      respawnRoomId = this.player.deathRoom;
+    } else {
+      respawnRoomId = 'midgard:center';
+    }
     this.player.currentRoom = respawnRoomId;
 
     this.emit('update'); // Обновляем UI
@@ -1586,6 +1591,7 @@ export class GameEngine {
         equippedWeapon: this.player.equippedWeapon,
         equippedArmor: this.player.equippedArmor,
         skills: Array.from(this.player.skills),
+        deathRoom: this.player.deathRoom,
         ui_version: this.player.ui_version || 0
       },
       loadedAreaIds: Array.from(this.loadedAreaIds),
