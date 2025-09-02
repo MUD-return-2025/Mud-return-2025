@@ -4,6 +4,7 @@ import { Room } from './classes/Room.js';
 import { NPC } from './classes/NPC.js';
 import { CommandParser } from './classes/CommandParser.js';
 import { DamageParser } from './utils/damageParser.js';
+import commands from './commands/index.js';
 
 /**
  * Основной игровой движок
@@ -38,7 +39,7 @@ export class GameEngine {
     this.npcLocationMap = new Map(); // Карта <globalNpcId, globalRoomId>
     this.listeners = {}; // Объект для подписчиков на события { eventName: [callback, ...] }
 
-    this.registerCommands();
+    this._loadCommands();
 
     // Основной игровой цикл (тикер) для обработки асинхronных событий, таких как возрождение.
     // Управление вызовом `update()` передано в компонент GameTerminal.vue.
@@ -161,128 +162,24 @@ export class GameEngine {
   }
 
   /**
-   * Регистрирует все игровые команды
+   * Загружает и регистрирует все команды из папки commands.
+   * @private
    */
-  registerCommands() {
-    this.commandParser.registerCommand('look', this.cmdLook.bind(this), 
-      'осмотреться вокруг или изучить предмет/НПС', 
-      ['л', 'смотреть', 'осмотреть']
-    );
-    
-    this.commandParser.registerCommand('go', this.cmdGo.bind(this), 
-      'идти в указанном направлении (север/юг/восток/запад)', 
-      ['идти', 'иди', 'с', 'ю', 'в', 'з', 'север', 'юг', 'восток', 'запад']
-    );
-    
-    this.commandParser.registerCommand('get', this.cmdGet.bind(this), 
-      'взять предмет', 
-      ['взять']
-    );
-    
-    this.commandParser.registerCommand('drop', this.cmdDrop.bind(this), 
-      'бросить предмет', 
-      ['бросить']
-    );
-    
-    this.commandParser.registerCommand('inventory', this.cmdInventory.bind(this), 
-      'показать инвентарь', 
-      ['inv', 'и', 'инвентарь']
-    );
-    
-    this.commandParser.registerCommand('kill', this.cmdKill.bind(this), 
-      'атаковать цель', 
-      ['убить', 'атаковать']
-    );
-    
-    this.commandParser.registerCommand('kick', this.cmdKick.bind(this),
-      'пнуть противника',
-      ['пнуть']
-    );
-
-    this.commandParser.registerCommand('say', this.cmdSay.bind(this), 
-      'поговорить с НПС', 
-      ['говорить', 'сказать']
-    );
-    
-    this.commandParser.registerCommand('talk', this.cmdTalk.bind(this), 
-      'поговорить с конкретным НПС', 
-      ['поговорить']
-    );
-    
-    this.commandParser.registerCommand('use', this.cmdUse.bind(this), 
-      'использовать предмет', 
-      ['использовать']
-    );
-    
-    this.commandParser.registerCommand('stats', this.cmdStats.bind(this), 
-      'показать характеристики игрока', 
-      ['статы', 'характеристики']
-    );
-    
-    this.commandParser.registerCommand('help', this.cmdHelp.bind(this), 
-      'показать эту справку', 
-      ['помощь', 'справка']
-    );
-    
-    this.commandParser.registerCommand('save', this.cmdSave.bind(this), 
-      'сохранить игру', 
-      ['сохранить']
-    );
-    
-    this.commandParser.registerCommand('load', this.cmdLoad.bind(this), 
-      'загрузить игру', 
-      ['загрузить']
-    );
-    
-    this.commandParser.registerCommand('heal', this.cmdHeal.bind(this), 
-      'исцелиться у жреца', 
-      ['исцелить']
-    );
-    
-    this.commandParser.registerCommand('equip', this.cmdEquip.bind(this), 
-      'экипировать оружие или броню', 
-      ['экипировать']
-    );
-    
-    this.commandParser.registerCommand('unequip', this.cmdUnequip.bind(this), 
-      'снять экипированный предмет', 
-      ['снять']
-    );
-    
-    this.commandParser.registerCommand('list', this.cmdList.bind(this), 
-      'посмотреть товары торговца', 
-      ['список']
-    );
-    
-    this.commandParser.registerCommand('buy', this.cmdBuy.bind(this), 
-      'купить товар у торговца', 
-      ['купить']
-    );
-    
-    this.commandParser.registerCommand('sell', this.cmdSell.bind(this), 
-      'продать предмет торговцу', 
-      ['продать']
-    );
-
-    this.commandParser.registerCommand('flee', this.cmdFlee.bind(this),
-      'сбежать из боя',
-      ['сбежать']
-    );
-
-    this.commandParser.registerCommand('respawn', this.cmdRespawn.bind(this),
-      'возродиться после смерти',
-      ['возродиться']
-    );
-
-    this.commandParser.registerCommand('consider', this.cmdConsider.bind(this),
-      'оценить предмет или противника',
-      ['con', 'consider']
-    );
-
-    this.commandParser.registerCommand('gain', this.cmdGain.bind(this),
-      'увеличить характеристику для отладки (gain <стат> <число>)',
-      ['получить']
-    );
+  _loadCommands() {
+    for (const command of commands) {
+      this.commandParser.registerCommand(
+        command.name,
+        command.execute,
+        command.description,
+        command.aliases
+      );
+      // Регистрируем специальные алиасы (например, 'север' -> 'go север')
+      if (command.shortcuts) {
+        for (const [shortcut, target] of Object.entries(command.shortcuts)) {
+          this.commandParser.aliases.set(shortcut, `${command.name} ${target}`);
+        }
+      }
+    }
   }
 
   /**
@@ -303,10 +200,7 @@ export class GameEngine {
       return 'Вы не можете сделать это в бою! Попробуйте `flee` (сбежать).';
     }
 
-    const result = await this.commandParser.executeCommand(parsed, this);
-
-    // После каждой команды оповещаем UI о возможном изменении состояния игрока
-    this.emit('update');
+    const result = await this.commandParser.executeCommand(parsed, this);    
     
     // Добавляем команду и результат в историю
     this.messageHistory.push(`> ${input}`);
@@ -464,221 +358,6 @@ export class GameEngine {
 
     return localItemId ? this.getItem(localItemId, traderAreaId) : null;
   }
-  /**
-   * Команда: look - осмотр локации или предмета
-   */
-  cmdLook(cmd) {
-    if (this.player.state === 'dead') {
-      return this.colorize(
-        'Вы бестелесный дух, парящий над своим телом.\nМир вокруг кажется серым и размытым. Вы можете только \'respawn\' (возродиться).',
-        'player-dead-look'
-      );
-    }
-    const currentRoom = this.getCurrentRoom();
-    
-    if (!cmd.target) {
-      // Осматриваем локацию
-      return currentRoom.getFullDescription(this);
-    }
-    
-    // Осматриваем конкретный предмет или НПС
-    const target = cmd.target.toLowerCase();
-    
-    // Ищем среди предметов в комнате
-    const globalItemId = currentRoom.findItem(target, this);
-    if (globalItemId) {
-      const item = this.items.get(globalItemId);
-      return item.description + (item.readText ? `\n\nНа ${this.colorize(item.name, 'item-name')} написано: "${item.readText}"` : '');
-    }
-    
-    // Ищем среди предметов в инвентаре
-    const inventoryItem = this.player.findItem(target, this);
-    if (inventoryItem) {
-      return inventoryItem.description;
-    }
-    
-    // Ищем в товарах торговца
-    const traderItem = this._findItemInTraderShop(target);
-    if (traderItem) {
-      // Используем ту же логику, что и для предмета в комнате
-      return traderItem.description + (traderItem.readText ? `\n\nНа ${this.colorize(traderItem.name, 'item-name')} написано: "${traderItem.readText}"` : '');
-    }
-
-    // Ищем среди НПС
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-    const npcIdInRoom = currentRoom.findNpc(target, this, currentAreaId);
-    if (npcIdInRoom) {
-      const npc = this.getNpc(npcIdInRoom, currentAreaId);
-      return npc.description + (npc.hitPoints <= 0 ? this.colorize(' (мертв)', 'npc-dead') : '');
-    }
-    
-    return `Вы не видите "${cmd.target}" здесь.`;
-  }
-
-  /**
-   * Команда: go - перемещение между локациями
-   */
-  async cmdGo(cmd) {
-    if (!cmd.target) {
-      return 'Куда вы хотите пойти? Используйте: go <направление>';
-    }
-    
-    if (this.player.state === 'fighting') {
-      return 'Вы не можете уйти во время боя!';
-    }
-
-    const currentRoom = this.getCurrentRoom();
-    const direction = cmd.target.toLowerCase();
-    const exit = currentRoom.getExit(direction);
-    
-    if (!exit) {
-      return `Вы не можете пойти ${direction} отсюда.`;
-    }
-
-    let targetRoomId;
-
-    if (typeof exit === 'string') {
-      // Обычный переход внутри текущей зоны
-      const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-      targetRoomId = this._getGlobalId(exit, currentAreaId);
-    } else if (typeof exit === 'object') {
-      // Межзоновый переход
-      const targetAreaId = exit.area;
-      const targetLocalRoomId = exit.room;
-
-      // Загружаем зону, если она еще не была загружена
-      if (!this.loadedAreaIds.has(targetAreaId)) {
-        this.emit('message', `Загрузка новой зоны: ${targetAreaId}...`);
-        await this.loadArea(targetAreaId);
-      }
-      targetRoomId = this._getGlobalId(targetLocalRoomId, targetAreaId);
-    }
-    
-    this.player.currentRoom = targetRoomId;
-    const newRoom = this.getCurrentRoom();
-    return `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}`;
-  }
-
-  /**
-   * Команда: get - взять предмет
-   */
-  cmdGet(cmd) {
-    if (!cmd.target) {
-      return 'Что вы хотите взять?';
-    }
-    
-    const currentRoom = this.getCurrentRoom();
-    const target = cmd.target.toLowerCase();
-    
-    // Ищем предмет в локации
-    const globalItemId = currentRoom.findItem(target, this);
-    if (!globalItemId) {
-      return `Вы не видите "${cmd.target}" здесь.`;
-    }
-    
-    const item = this.items.get(globalItemId);
-    if (!item.canTake) {
-      return `Вы не можете взять ${item.name}.`;
-    }
-    
-    if (!this.player.canCarry(item)) {
-      return `${item.name} слишком тяжелый для вас.`;
-    }
-    
-    // Перемещаем предмет из локации в инвентарь
-    currentRoom.removeItem(globalItemId);
-    this.player.addItem({ ...item, globalId: globalItemId });
-    
-    return `Вы взяли ${this.colorize(item.name, 'item-name')}.`;
-  }
-
-  /**
-   * Команда: drop - бросить предмет
-   */
-  cmdDrop(cmd) {
-    if (!cmd.target) {
-      return 'Что вы хотите бросить?';
-    }
-    
-    const item = this.player.findItem(cmd.target, this);
-    if (!item) {
-      return `У вас нет "${cmd.target}".`;
-    }
-    
-    const currentRoom = this.getCurrentRoom();
-    this.player.removeItem(item.globalId);
-    currentRoom.addItem(item.globalId); // В комнату добавляем глобальный ID
-    
-    return `Вы бросили ${this.colorize(item.name, 'item-name')}.`;
-  }
-
-  /**
-   * Команда: inventory - показать инвентарь
-   */
-  cmdInventory() {
-    if (this.player.inventory.length === 0) {
-      return 'Ваш инвентарь пуст.';
-    }
-    
-    let result = 'Ваш инвентарь:\n';
-    let totalWeight = 0;
-    
-    this.player.inventory.forEach(item => {
-      result += `  ${this.colorize(item.name, 'item-name')}`;
-      if (item.weight) {
-        result += ` (вес: ${item.weight})`;
-        totalWeight += item.weight;
-      }
-      result += '\n';
-    });
-    
-    result += `\nОбщий вес: ${totalWeight}/${this.player.strength * 10}`;
-    return result;
-  }
-
-  /**
-   * Команда: kill - атака
-   */
-  cmdKill(cmd) {
-    if (this.player.state === 'fighting') {
-      return 'Вы уже в бою!';
-    }
-
-    if (!cmd.target) {
-      return 'Кого вы хотите атаковать?';
-    }
-
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-    const currentRoom = this.getCurrentRoom();
-    const target = cmd.target.toLowerCase();
-
-    // Ищем НПС в локации
-    const npcId = currentRoom.findNpc(target, this, currentAreaId);
-    if (!npcId) {
-      return `Здесь нет "${cmd.target}" для атаки.`;
-    }
-    const npc = this.getNpc(npcId, currentAreaId);
-    
-    if (npc.type === 'friendly') {
-      return `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} дружелюбен к вам. Вы не можете атаковать.`;
-    }
-    
-    // Начинаем бой
-    this.player.state = 'fighting';
-    this.combatTarget = this._getGlobalId(npcId, currentAreaId);
-    
-    // Запускаем боевой цикл
-    const initialAttackMessage = `Вы атакуете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}!`;
-    const firstRoundResult = this.performCombatRound();
-    this.emit('message', `${initialAttackMessage}\n${firstRoundResult}`);
- 
-    // Если бой не закончился, запускаем цикл боя
-    if (this.player.state === 'fighting') {
-      this._combatLoop();
-    }
-
-    return ''; // Все сообщения теперь обрабатываются через события
-  }
 
   /**
    * Рекурсивный цикл боя, использующий setTimeout для большей надежности.
@@ -693,30 +372,22 @@ export class GameEngine {
     }
   }
 
-  cmdKick(cmd) {
-    if (!this.player.hasSkill('kick')) {
-      return "Вы не знаете этого умения.";
-    }
+  /**
+   * Начинает бой с указанным NPC.
+   * @param {import('./classes/NPC').NPC} npc - Цель для атаки.
+   */
+  startCombat(npc) {
+    this.player.state = 'fighting';
+    this.combatTarget = this._getGlobalId(npc.id, npc.area);
 
-    if (this.player.state !== 'fighting') {
-      if (!cmd.target) {
-        return 'Кого вы хотите пнуть?';
-      }
-      // Начать бой с пинка
-      this.player.nextAttackIsSkill = 'kick';
-      // cmdKill обработает начало боя
-      return this.cmdKill(cmd);
-    }
+    const initialAttackMessage = `Вы атакуете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}!`;
+    const firstRoundResult = this.performCombatRound();
+    this.emit('message', `${initialAttackMessage}\n${firstRoundResult}`);
 
-    // В бою
-    if (this.player.skillUsedThisRound) {
-      return "Вы уже использовали умение в этом раунде.";
+    // Если бой не закончился, запускаем цикл боя
+    if (this.player.state === 'fighting') {
+      this._combatLoop();
     }
-
-    this.player.nextAttackIsSkill = 'kick';
-    this.player.skillUsedThisRound = true; // Умение будет использовано в следующем тике атаки игрока
-    const npc = this.npcs.get(this.combatTarget);
-    return `Вы готовитесь пнуть ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`;
   }
 
   /**
@@ -890,199 +561,6 @@ export class GameEngine {
   }
 
   /**
-   * Команда: say - разговор с НПС
-   */
-  cmdSay(cmd) {
-    if (!cmd.target) {
-      return 'Что вы хотите сказать?';
-    }
-    
-    const currentRoom = this.getCurrentRoom();
-    let result = this.colorize(`Вы говорите: "${cmd.target}"`, 'player-speech') + '\n\n';
-    
-    // Все НПС в локации реагируют
-    const responses = [];
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-    currentRoom.npcs.forEach(localNpcId => {
-      const npc = this.getNpc(localNpcId, currentAreaId);
-      if (npc?.isAlive()) {
-        responses.push(npc.speak(this, currentAreaId));
-      }
-    });
-    
-    if (responses.length > 0) {
-      result += responses.join('\n');
-    } else {
-      result += 'Никто не отвечает.';
-    }
-    
-    return result;
-  }
-
-  /**
-   * Команда: talk - поговорить с НПС
-   */
-  cmdTalk(cmd) {
-    if (!cmd.target) {
-      return 'С кем вы хотите поговорить?';
-    }
-
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-    const currentRoom = this.getCurrentRoom();
-    const target = cmd.target.toLowerCase();
-
-    const npcId = currentRoom.findNpc(target, this, currentAreaId);
-    if (!npcId) {
-      return `Здесь нет никого по имени "${cmd.target}".`;
-    }
-    const npc = this.getNpc(npcId, currentAreaId);
-    return npc.speak(this);
-  }
-
-  /**
-   * Команда: use - использование предмета
-   */
-  cmdUse(cmd) {
-    if (!cmd.target) {
-      return 'Что вы хотите использовать?';
-    }
-    
-    const item = this.player.findItem(cmd.target, this);
-    if (!item) {
-      return `У вас нет "${cmd.target}".`;
-    }
-    
-    // Обработка зелий
-    if (item.type === 'potion' && item.healAmount) {
-      const healed = this.player.heal(item.healAmount, this);
-      this.player.removeItem(item.id);
-      return `Вы выпили ${this.colorize(item.name, 'item-name')}. Восстановлено ${healed} HP.`;
-    }
-    
-    return `Вы не знаете, как использовать ${item.name}.`;
-  }
-
-  /**
-   * Команда: stats - показать характеристики игрока
-   */
-  cmdStats() {
-    const p = this.player;
-    return `=== Характеристики ===
-Имя: ${p.name}
-Уровень: ${p.level}
-Опыт: ${p.experience}/${p.experienceToNext}
-Здоровье: ${p.hitPoints}/${p.maxHitPoints}
-
-Сила: ${p.strength}
-Ловкость: ${p.dexterity}
-Телосложение: ${p.constitution}
-Интеллект: ${p.intelligence}
-Мудрость: ${p.wisdom}
-Харизма: ${p.charisma}
-
-Состояние: ${p.state === 'fighting' ? 'в бою' : p.state === 'dead' ? 'мертв' : 'готов'}`;
-  }
-
-  /**
-   * Команда: help - справка
-   */
-  cmdHelp() {
-    return this.commandParser.generateHelp();
-  }
-
-  /**
-   * Команда: save - сохранение игры
-   */
-  cmdSave() {
-    try {
-      this.saveGame();
-      return 'Игра сохранена.';
-    } catch (error) {
-      return 'Ошибка сохранения игры.';
-    }
-  }
-
-  /**
-   * Команда: load - загрузка игры
-   */
-  async cmdLoad() {
-    try {
-      const loaded = await this.loadGame();
-      if (loaded) {
-        const currentRoom = this.getCurrentRoom();
-        return `Игра загружена.\n\n${currentRoom.getFullDescription(this)}`;
-      } else {
-        return 'Сохранение не найдено.';
-      }
-    } catch (error) {
-      console.error('Ошибка в cmdLoad:', error);
-      return 'Ошибка загрузки игры.';
-    }
-  }
-
-  /**
-   * Команда: heal - исцеление у жреца
-   */
-  cmdHeal() {
-    const currentRoom = this.getCurrentRoom();
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-    const priestId = currentRoom.npcs.find(localNpcId => {
-      const npc = this.getNpc(localNpcId, currentAreaId);
-      return npc && npc.canHeal;
-    });
-    const priest = this.getNpc(priestId, currentAreaId);
-    if (!priest) {
-      return 'Здесь нет никого, кто мог бы вас исцелить.';
-    }
-    
-    if (this.player.hitPoints >= this.player.maxHitPoints) {
-      return 'Вы полностью здоровы.';
-    }
-    
-    this.player.hitPoints = this.player.maxHitPoints;
-    return `${this.colorize(priest.name, 'npc-name npc-friendly')} исцелил ваши раны. Вы полностью здоровы.`;
-  }
-
-  /**
-   * Команда: flee - сбежать из боя
-   */
-  cmdFlee(cmd) {
-    if (this.player.state !== 'fighting') {
-      return 'Вы не в бою.';
-    }
-    const npc = this.npcs.get(this.combatTarget);
-    this.stopCombat(true); // playerFled = true
-    return `Вы успешно сбежали от ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`;
-  }
-
-  /**
-   * Команда: respawn - возрождение игрока
-   */
-  cmdRespawn(cmd) {
-    if (this.player.state !== 'dead') {
-      return 'Вы и так живы.';
-    }
-
-    // Восстанавливаем состояние игрока
-    this.player.hitPoints = this.player.maxHitPoints;
-    this.player.state = 'idle';
-
-    // Перемещаем в стартовую локацию или в место смерти
-    let respawnRoomId;
-    if ((cmd.target === 'here' || cmd.target === 'здесь') && this.player.deathRoom) {
-      respawnRoomId = this.player.deathRoom;
-    } else {
-      respawnRoomId = 'midgard:center';
-    }
-    this.player.currentRoom = respawnRoomId;
-
-    const respawnRoom = this.rooms.get(respawnRoomId);
-
-    return this.colorize('Вы чувствуете, как жизнь возвращается в ваше тело. Мир вновь обретает краски.', 'player-respawn') + `\n\n` +
-           respawnRoom.getFullDescription(this);
-  }
-
-  /**
    * Проверяет и выдает игроку новые умения при повышении уровня.
    * @returns {string} Сообщение о новых умениях.
    */
@@ -1095,140 +573,6 @@ export class GameEngine {
       }
     }
     return message.trim();
-  }
-
-  /**
-   * Команда: consider - оценка предмета или NPC
-   */
-  cmdConsider(cmd) {
-    if (!cmd.target) {
-      return 'Что вы хотите оценить? (consider <предмет/нпс>)';
-    }
-
-    const target = cmd.target.toLowerCase();
-    const currentRoom = this.getCurrentRoom();
-
-    // 1. Проверяем предмет в инвентаре
-    let item = this.player.findItem(target, this);
-    if (item) {
-      return this._getConsiderItemString(item);
-    }
-
-    // 2. Проверяем предмет в комнате
-    const globalItemId = currentRoom.findItem(target, this);
-    if (globalItemId) {
-      item = this.items.get(globalItemId);
-      return this._getConsiderItemString(item);
-    }
-
-    // 2.5. Проверяем предмет у торговца
-    item = this._findItemInTraderShop(target);
-    if (item) {
-      return this._getConsiderItemString(item);
-    }
-
-    // 3. Проверяем NPC в комнате
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-    const npcId = currentRoom.findNpc(target, this, currentAreaId);
-    if (npcId) {
-      const npc = this.getNpc(npcId, currentAreaId);
-      return this._getConsiderNpcString(npc);
-    }
-
-    return `Вы не видите "${cmd.target}" здесь.`;
-  }
-
-  /**
-   * Команда: gain - для отладки, увеличивает характеристику
-   */
-  cmdGain(cmd) {
-    if (!cmd.target) {
-      return 'Использование: gain <характеристика> <число>';
-    }
-
-    const args = cmd.target.split(/\s+/);
-    if (args.length < 2) {
-      return 'Использование: gain <характеристика> <число>';
-    }
-
-    const statName = args[0].toLowerCase();
-    const amount = parseInt(args[1], 10);
-
-    if (isNaN(amount)) {
-      return 'Неверное число.';
-    }
-
-    const statMap = {
-      'сила': 'strength', 'str': 'strength',
-      'ловкость': 'dexterity', 'dex': 'dexterity',
-      'телосложение': 'constitution', 'con': 'constitution',
-      'интеллект': 'intelligence', 'int': 'intelligence',
-      'мудрость': 'wisdom', 'wis': 'wisdom',
-      'харизма': 'charisma', 'cha': 'charisma',
-      'здоровье': 'hitPoints', 'hp': 'hitPoints', 'хп': 'hitPoints',
-      'максхп': 'maxHitPoints', 'maxhp': 'maxHitPoints',
-      'уровень': 'level', 'lvl': 'level', 'лвл': 'level',
-      'опыт': 'experience', 'exp': 'experience',
-    };
-
-    const propName = statMap[statName];
-
-    if (!propName) {
-      return `Неизвестная характеристика: "${statName}".\nДоступные: ${Object.keys(statMap).join(', ')}.`;
-    }
-
-    const p = this.player;
-    let message = '';
-
-    switch (propName) {
-      case 'experience': {
-        const levelUpMessage = p.addExperience(amount);
-        message = `Вы получили ${amount} опыта.`;
-        if (levelUpMessage) {
-          message += `\n${levelUpMessage.message}`;
-          const newSkillMessage = this.checkAndAwardSkills();
-          if (newSkillMessage) {
-            message += `\n${newSkillMessage}`;
-          }
-        }
-        break;
-      }
-      case 'level': {
-        if (amount > 0) {
-          for (let i = 0; i < amount; i++) {
-            const levelUpMessage = p.levelUp();
-            message += (message ? '\n' : '') + levelUpMessage.message;
-          }
-          const newSkillMessage = this.checkAndAwardSkills();
-          if (newSkillMessage) {
-            message += `\n${newSkillMessage}`;
-          }
-        } else {
-          p.level = Math.max(1, p.level + amount);
-        }
-        if (!message) message = `Уровень изменен на ${amount}.`;
-        break;
-      }
-      case 'hitPoints': {
-        const oldHp = p.hitPoints;
-        p.hitPoints = Math.max(0, Math.min(p.maxHitPoints, p.hitPoints + amount));
-        const change = p.hitPoints - oldHp;
-        message = `Здоровье изменено на ${change >= 0 ? '+' : ''}${change}. Текущее здоровье: ${p.hitPoints}/${p.maxHitPoints}.`;
-        break;
-      }
-      case 'maxHitPoints':
-        p.maxHitPoints += amount;
-        p.hitPoints = Math.min(p.hitPoints, p.maxHitPoints); // Don't exceed new max
-        message = `Максимальное здоровье изменено на ${amount}. Текущее здоровье: ${p.hitPoints}/${p.maxHitPoints}.`;
-        break;
-      default:
-        // For strength, dexterity, etc.
-        p[propName] += amount;
-        message = `${this.colorize(Object.keys(statMap).find(key => statMap[key] === propName), 'item-name')} увеличена на ${amount}. Новое значение: ${p[propName]}.`;
-        break;
-    }
-
-    return message;
   }
 
   /**
@@ -1313,142 +657,6 @@ export class GameEngine {
     }
 
     return comparison;
-  }
-
-  /**
-   * Команда: equip - экипировка предмета
-   */
-  cmdEquip(cmd) {
-    if (!cmd.target) {
-      return 'Что вы хотите экипировать?';
-    }
-
-    const item = this.player.findItem(cmd.target, this);
-    if (!item) {
-      return `У вас нет "${cmd.target}".`;
-    }
-
-    if (item.type === 'weapon') {
-      return this.player.equipWeapon(item);
-    } else if (item.type === 'armor') {
-      return this.player.equipArmor(item);
-    } else {
-      return `${item.name} нельзя экипировать.`;
-    }
-  }
-
-  /**
-   * Команда: unequip - снятие экипировки
-   */
-  cmdUnequip(cmd) {
-    if (!cmd.target) {
-      return 'Что вы хотите снять? (weapon/armor)';
-    }
-
-    const target = cmd.target.toLowerCase();
-    if (target.includes('weapon') || target.includes('оружие')) {
-      return this.player.unequipWeapon();
-    } else if (target.includes('armor') || target.includes('броня')) {
-      return this.player.unequipArmor();
-    } else {
-      return 'Укажите "weapon" или "armor" для снятия экипировки.';
-    }
-  }
-
-  /**
-   * Команда: list - просмотр товаров торговца
-   */
-  cmdList() {
-    const npc = this._getTraderInCurrentRoom();
-    if (!npc) {
-      return 'Здесь нет торговцев.';
-    }
-
-    const shopItems = npc.getShopItems();
-    
-    if (shopItems.length === 0) {
-      return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Извините, товар закончился."`;
-    }
-
-    let result = `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} предлагает:\n`;
-    shopItems.forEach((localItemId, index) => {
-      const item = this.getItem(localItemId, npc.area);
-      if (item) {
-        result += `${index + 1}. ${this.colorize(item.name, 'item-name')} - ${item.value || 'N/A'} золота\n`;
-      }
-    });
-
-    result += '\nИспользуйте "buy <название>" для покупки.';
-    return result;
-  }
-
-  /**
-   * Команда: buy - покупка товара
-   */
-  cmdBuy(cmd) {
-    if (!cmd.target) {
-      return 'Что вы хотите купить?';
-    }
-
-    const npc = this._getTraderInCurrentRoom();
-    if (!npc) {
-      return 'Здесь нет торговцев.';
-    }
-
-    const shopItems = npc.getShopItems();
-    const target = cmd.target.toLowerCase();
-
-    // Ищем товар в магазине
-    const localItemId = shopItems.find(id => {
-      const item = this.getItem(id, npc.area);
-      return item && item.name.toLowerCase().includes(target);
-    });
-
-    if (!localItemId) {
-      return `${this.colorize(npc.name, `npc-name npc-${npc.type}`)} говорит: "У меня нет такого товара."`;
-    }
-
-    const item = this.getItem(localItemId, npc.area);
-    
-    // Проверяем, может ли игрок нести предмет
-    if (!this.player.canCarry(item, this)) {
-      return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Этот товар слишком тяжел для вас."`;
-    }
-
-    // В упрощенной версии покупка бесплатная
-    this.player.addItem({ ...item, globalId: this._getGlobalId(item.id, item.area) });
-    return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Вот ваш ${this.colorize(item.name, 'item-name')}. Пользуйтесь на здоровье!"`;
-  }
-
-  /**
-   * Команда: sell - продажа предмета торговцу
-   */
-  cmdSell(cmd) {
-    if (!cmd.target) {
-      return 'Что вы хотите продать?';
-    }
-
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
-    const currentRoom = this.getCurrentRoom();
-    const merchantId = currentRoom.npcs.find(localNpcId => {
-      const npc = this.getNpc(localNpcId, currentAreaId);
-      return npc && npc.canTrade && npc.canTrade();
-    });
-
-    if (!merchantId) {
-      return 'Здесь нет торговцев.';
-    }
-
-    const item = this.player.findItem(cmd.target, this);
-    if (!item) {
-      return `У вас нет "${cmd.target}".`;
-    }
-
-    const npc = this.getNpc(merchantId, currentAreaId);
-    this.player.removeItem(item.globalId);
-    
-    const sellPrice = Math.floor((item.value || 10) / 2);
-    return `${this.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Спасибо за ${this.colorize(item.name, 'item-name')}! Вот вам ${sellPrice} золота." (В этой версии золото пока не реализовано)`;
   }
 
   /**
@@ -1773,23 +981,16 @@ ${this.getCurrentRoom().getFullDescription(this)}
 
   /**
    * Переходит в указанную комнату, если это возможно
-   * @param {string} targetRoomId - ID целевой комнаты
-   * @returns {Object} результат перехода
+   * @param {string} targetRoomId - Глобальный ID целевой комнаты.
+   * @param {string} direction - Направление, для вывода сообщения
+   * @returns {Promise<{success: boolean, message: string}>} результат перехода
    */
-  async moveToRoom(targetRoomId) {
+  async moveToRoom(targetRoomId, direction = 'куда-то') {
     if (this.player.state === 'fighting') {
       return { success: false, message: 'Вы не можете уйти во время боя!' };
     }
-
     if (this.player.state === 'dead') {
       return { success: false, message: 'Вы мертвы и не можете двигаться.' };
-    }
-
-    const currentRoom = this.getCurrentRoom();
-    const availableRooms = this.getAvailableRooms();
-    
-    if (!availableRooms.includes(targetRoomId)) {
-      return { success: false, message: 'Эта комната недоступна отсюда.' };
     }
 
     const [targetAreaId] = this._parseGlobalId(targetRoomId);
@@ -1798,29 +999,22 @@ ${this.getCurrentRoom().getFullDescription(this)}
       await this.loadArea(targetAreaId);
     }
 
-    // Находим направление для перехода
-    let direction = 'куда-то';
-    for (const [dir, exit] of currentRoom.exits.entries()) {
-      let exitGlobalId;
-      if (typeof exit === 'string') {
-        exitGlobalId = this._getGlobalId(exit, currentRoom.area);
-      } else {
-        exitGlobalId = this._getGlobalId(exit.room, exit.area);
-      }
-      if (exitGlobalId === targetRoomId) {
-        direction = dir;
-        break;
+    // Если направление не было передано (например, при клике на карту), пробуем найти его.
+    if (direction === 'куда-то') {
+      const currentRoom = this.getCurrentRoom();
+      for (const [dir, exit] of currentRoom.exits.entries()) {
+        const exitGlobalId = (typeof exit === 'object')
+          ? this._getGlobalId(exit.room, exit.area)
+          : this._getGlobalId(exit, currentRoom.area);
+        if (exitGlobalId === targetRoomId) {
+          direction = dir;
+          break;
+        }
       }
     }
 
     this.player.currentRoom = targetRoomId;
     const newRoom = this.getCurrentRoom();
-    
-    this.emit('update');
-
-    return { 
-      success: true, 
-      message: `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this, targetAreaId)}` 
-    };
+    return { success: true, message: `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}` };
   }
 }

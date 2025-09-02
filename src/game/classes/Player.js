@@ -1,4 +1,5 @@
 
+import { DamageParser } from "../utils/damageParser.js";
 /**
  * Представляет игрока, управляя его состоянием, характеристиками,
  * инвентарем и действиями в игровом мире.
@@ -149,33 +150,6 @@ export class Player {
   }
 
   /**
-   * Сохраняет состояние игрока.
-   * @deprecated Этот метод не используется, так как сохранение управляется `GameEngine`.
-   */
-  save() {
-    const playerData = {
-      name: this.name,
-      level: this.level,
-      experience: this.experience,
-      experienceToNext: this.experienceToNext,
-      hitPoints: this.hitPoints,
-      maxHitPoints: this.maxHitPoints,
-      strength: this.strength,
-      dexterity: this.dexterity,
-      constitution: this.constitution,
-      intelligence: this.intelligence,
-      wisdom: this.wisdom,
-      charisma: this.charisma,
-      inventory: this.inventory,
-      currentRoom: this.currentRoom,
-      state: this.state,
-      skills: Array.from(this.skills)
-    };
-    
-    localStorage.setItem('mudgame_player', JSON.stringify(playerData));
-  }
-
-  /**
    * Загружает состояние игрока из предоставленного объекта данных.
    * @param {object} data - Данные для загрузки.
    */
@@ -304,31 +278,10 @@ export class Player {
    * @returns {number} Итоговый урон от оружия.
    */
   rollWeaponDamage() {
-    if (!this.equippedWeapon) {
-      return 0;
+    if (!this.equippedWeapon || !this.equippedWeapon.damage) {
+      return 0; // Возвращаем 0, если оружия нет, бонус от силы добавится позже
     }
-    
-    // Парсим урон оружия (например "1d6+1")
-    const match = this.equippedWeapon.damage?.match(/(\d+)d(\d+)(?:([+-])(\d+))?/);
-    if (!match) {
-      return 1; // Базовый урон, если не указан.
-    }
-    
-    const [, diceCount, diceSize, operator, modifier] = match;
-    let weaponDamage = 0;
-    
-    // Бросаем кубики оружия
-    for (let i = 0; i < parseInt(diceCount); i++) {
-      weaponDamage += Math.floor(Math.random() * parseInt(diceSize)) + 1;
-    }
-    
-    // Применяем модификатор
-    if (operator && modifier) {
-      const mod = parseInt(modifier);
-      weaponDamage += operator === '+' ? mod : -mod;
-    }
-    
-    return Math.max(1, weaponDamage);
+    return new DamageParser(this.equippedWeapon.damage).roll();
   }
 
   /**
@@ -337,5 +290,15 @@ export class Player {
    */
   getArmorDefenseBonus() {
     return this.equippedArmor ? (this.equippedArmor.armor || 0) : 0;
+  }
+
+  /**
+   * Рассчитывает и возвращает общую защиту игрока.
+   * @returns {number}
+   */
+  getTotalDefense() {
+    const dexBonus = Math.floor((this.dexterity - 10) / 2);
+    const armorBonus = this.getArmorDefenseBonus();
+    return 10 + dexBonus + armorBonus;
   }
 }

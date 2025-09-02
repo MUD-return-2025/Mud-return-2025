@@ -19,58 +19,7 @@ export class CommandParser {
      * Ключ - алиас, значение - полная команда (например, 'л' -> 'look').
      */
     this.aliases = new Map();
-    this.initializeCommands();
-  }
-
-  /**
-   * Инициализация базовых команд и их алиасов.
-   * Этот метод заполняет карту `this.aliases` для быстрого доступа.
-   */
-  initializeCommands() {
-    // Единый объект с алиасами для упрощения инициализации.
-    const shortcuts = {
-      'л': 'look',
-      'смотреть': 'look',
-      'осмотреть': 'look',
-      'идти': 'go',
-      'иди': 'go',
-      'север': 'go north',
-      'юг': 'go south',
-      'восток': 'go east',
-      'запад': 'go west',
-      'взять': 'get',
-      'бросить': 'drop',
-      'инвентарь': 'inventory',
-      'inv': 'inventory',
-      'и': 'inventory',
-      'убить': 'kill',
-      'атаковать': 'kill',
-      'говорить': 'say',
-      'сказать': 'say',
-      'использовать': 'use',
-      'экипировать': 'equip',
-      'снять': 'unequip',
-      'купить': 'buy',
-      'продать': 'sell',
-      'список': 'list',
-      'статы': 'stats',
-      'характеристики': 'stats',
-      'исцелить': 'heal',
-      'сохранить': 'save',
-      'загрузить': 'load',
-      'помощь': 'help',
-      'справка': 'help',
-      // Добавлен алиас для побега из боя
-      'сбежать': 'flee',
-      'возродиться': 'respawn',
-      'con': 'consider',
-      'пнуть': 'kick'
-    };
-
-    // Заполняем Map алиасов
-    for (const [alias, command] of Object.entries(shortcuts)) {
-      this.aliases.set(alias, command);
-    }
+    // Регистрация команд теперь происходит в GameEngine
   }
 
   /**
@@ -113,17 +62,21 @@ export class CommandParser {
 
   /**
    * Регистрирует обработчик команды с описанием и алиасами.
-   * @param {string} commandName - Название команды.
-   * @param {Function} handler - Функция-обработчик, принимающая (parsedCommand, game).
+   * @param {string} name - Название команды.
+   * @param {Function} handler - Функция-обработчик, принимающая (game, parsedCommand).
    * @param {string} [description=''] - Описание команды для справки.
    * @param {string[]} [aliases=[]] - Массив алиасов для отображения в справке.
    */
-  registerCommand(commandName, handler, description = '', aliases = []) {
-    this.commands.set(commandName, {
+  registerCommand(name, handler, description = '', aliases = []) {
+    this.commands.set(name, {
       handler: handler,
       description: description,
       aliases: aliases
     });
+    // Регистрируем алиасы, чтобы они указывали на основное имя команды
+    if (aliases) {
+      aliases.forEach(alias => this.aliases.set(alias, name));
+    }
   }
 
   /**
@@ -159,16 +112,15 @@ export class CommandParser {
    * @param {import('../GameEngine').GameEngine} game - Ссылка на игровой движок для передачи в обработчик.
    * @returns {string} Результат выполнения команды.
    */
-  executeCommand(parsedCommand, game) {
+  async executeCommand(parsedCommand, game) {
     const commandData = this.commands.get(parsedCommand.command);
 
     if (commandData) {
       try {
-        // Поддерживаем как старый формат (функция), так и новый (объект с полем handler).
-        const handler = typeof commandData === 'function' ? commandData : commandData.handler;
-        return handler(parsedCommand, game);
+        const handler = commandData.handler;
+        return await handler(game, parsedCommand);
       } catch (error) {
-        console.error('Ошибка выполнения команды:', error);
+        console.error(`Ошибка выполнения команды "${parsedCommand.command}":`, error);
         return 'Произошла ошибка при выполнении команды.';
       }
     }

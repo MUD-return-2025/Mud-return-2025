@@ -6,6 +6,7 @@ import { ref, computed, inject, watch } from 'vue';
  * @property {Object} player - Объект с данными игрока.
  * @property {Boolean} gameStarted - Флаг, указывающий, началась ли игра.
  * @property {Object} gameEngine - Экземпляр игрового движка.
+ * @property {Number} updateCounter - Счетчик обновлений для принудительной перерисовки.
  */
 const props = defineProps({
   player: {
@@ -115,13 +116,7 @@ const getPlayerDamage = () => {
  * @returns {number} Значение защиты.
  */
 const getPlayerDefense = () => {
-  let defense = 10 + Math.floor((props.player.dexterity - 10) / 2);
-
-  if (props.player.equippedArmor) {
-    defense += props.player.equippedArmor.armor || 0;
-  }
-
-  return defense;
+  return props.player.getTotalDefense ? props.player.getTotalDefense() : 10;
 };
 
 /**
@@ -129,6 +124,8 @@ const getPlayerDefense = () => {
  * Возвращают массив `[areaId, localRoomId]`.
  */
 const currentRoomIds = computed(() => {
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter; // Принудительная реактивность
   if (!props.gameStarted || !props.player.currentRoom) return [null, null];
   return props.gameEngine._parseGlobalId(props.player.currentRoom);
 });
@@ -220,7 +217,7 @@ const moveToRoom = async (localRoomId) => {
   if (result.success) {
     emit('move', result.message);
   } else {
-    emit('command', `Ошибка: ${result.message}`);
+    emit('move', result.message); // Отправляем сообщение об ошибке в лог
   }
 };
 
@@ -236,6 +233,8 @@ const currentRoom = computed(() => {
 
 /**
  * @description Вычисляемое свойство, возвращающее список живых NPC в текущей комнате.
+ * Зависит от `props.updateCounter`, чтобы принудительно пересчитываться,
+ * когда движок сообщает об изменениях (например, смерть NPC).
  * @type {import('vue').ComputedRef<import('../../game/classes/NPC').NPC[]>}
  */
 const npcsInRoom = computed(() => {
@@ -248,6 +247,7 @@ const npcsInRoom = computed(() => {
 
 /**
  * @description Вычисляемое свойство, возвращающее список предметов в текущей комнате.
+ * Зависит от `props.updateCounter` для принудительной перерисовки.
  * @type {import('vue').ComputedRef<Object[]>}
  */
 const itemsInRoom = computed(() => {
