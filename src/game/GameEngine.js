@@ -33,7 +33,7 @@ export class GameEngine {
     this.messageHistory = []; // История сообщений для вывода в терминал
     this.gameState = 'menu'; // Состояние игры: menu, playing, paused
     this.combatTarget = null; // Текущая цель в бою (глобальный ID)
-    this.combatInterval = null; // Интервал для автоматического боя
+    this.combatTimeout = null; // Таймаут для автоматического боя
     this.respawnQueue = []; // Очередь для возрождения НПС
     this.npcLocationMap = new Map(); // Карта <globalNpcId, globalRoomId>
     this.listeners = {}; // Объект для подписчиков на события { eventName: [callback, ...] }
@@ -671,16 +671,26 @@ export class GameEngine {
     const initialAttackMessage = `Вы атакуете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}!`;
     const firstRoundResult = this.performCombatRound();
     this.emit('message', `${initialAttackMessage}\n${firstRoundResult}`);
-
-    // Если бой не закончился, запускаем интервал
+ 
+    // Если бой не закончился, запускаем цикл боя
     if (this.player.state === 'fighting') {
-      this.combatInterval = setInterval(() => {
-        const roundResult = this.performCombatRound();
-        this.emit('message', roundResult);
-      }, 2500); // 2.5 секунды
+      this._combatLoop();
     }
 
     return ''; // Все сообщения теперь обрабатываются через события
+  }
+
+  /**
+   * Рекурсивный цикл боя, использующий setTimeout для большей надежности.
+   * @private
+   */
+  _combatLoop() {
+    const roundResult = this.performCombatRound();
+    this.emit('message', roundResult);
+
+    if (this.player.state === 'fighting') {
+      this.combatTimeout = setTimeout(() => this._combatLoop(), 2500);
+    }
   }
 
   cmdKick(cmd) {
@@ -836,9 +846,9 @@ export class GameEngine {
    * @param {boolean} playerFled - игрок сбежал?
    */
   stopCombat(playerFled = false) {
-    if (this.combatInterval) {
-      clearInterval(this.combatInterval);
-      this.combatInterval = null;
+    if (this.combatTimeout) {
+      clearTimeout(this.combatTimeout);
+      this.combatTimeout = null;
     }
     if (this.player.state !== 'dead') {
       this.player.state = 'idle';
@@ -1574,9 +1584,9 @@ export class GameEngine {
 
     // Очищаем временное состояние игры
     this.combatTarget = null;
-    if (this.combatInterval) {
-      clearInterval(this.combatInterval);
-      this.combatInterval = null;
+    if (this.combatTimeout) {
+      clearTimeout(this.combatTimeout);
+      this.combatTimeout = null;
     }
     this.respawnQueue = [];
     this.gameState = 'menu';
