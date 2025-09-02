@@ -1004,7 +1004,7 @@ export class GameEngine {
    */
   async cmdLoad() {
     try {
-      const loaded = this.loadGame();
+      const loaded = await this.loadGame();
       if (loaded) {
         const currentRoom = this.getCurrentRoom();
         return `Игра загружена.\n\n${currentRoom.getFullDescription(this)}`;
@@ -1012,6 +1012,7 @@ export class GameEngine {
         return 'Сохранение не найдено.';
       }
     } catch (error) {
+      console.error('Ошибка в cmdLoad:', error);
       return 'Ошибка загрузки игры.';
     }
   }
@@ -1591,6 +1592,24 @@ export class GameEngine {
     this.respawnQueue = [];
     this.gameState = 'menu';
   }
+
+  /**
+   * Синхронизирует массивы `npcs` во всех комнатах на основе `npcLocationMap`.
+   * Необходимо вызывать после загрузки состояния, чтобы комнаты "знали", какие NPC в них находятся.
+   * @private
+   */
+  _syncRoomsFromNpcMap() {
+    // 1. Очищаем всех NPC из всех комнат
+    for (const room of this.rooms.values()) {
+      room.npcs = [];
+    }
+    // 2. Заполняем комнаты NPC на основе карты их местоположений
+    for (const [globalNpcId, globalRoomId] of this.npcLocationMap.entries()) {
+      const room = this.rooms.get(globalRoomId);
+      const [, localNpcId] = this._parseGlobalId(globalNpcId);
+      if (room) room.addNpc(localNpcId);
+    }
+  }
   /**
    * Сохранение игры в localStorage
    */
@@ -1619,10 +1638,28 @@ export class GameEngine {
         ui_version: this.player.ui_version || 0
       },
       loadedAreaIds: Array.from(this.loadedAreaIds),
-      // Состояние комнат и NPC (предметы на полу, здоровье NPC) пока не сохраняем для простоты.
+      worldState: {
+        npcs: {},
+        rooms: {},
+        npcLocations: Array.from(this.npcLocationMap.entries()),
+      },
       timestamp: Date.now()
     };
     
+    // Сохраняем состояние каждого NPC (только то, что меняется)
+    for (const [globalNpcId, npc] of this.npcs.entries()) {
+      gameData.worldState.npcs[globalNpcId] = {
+        hitPoints: npc.hitPoints,
+      };
+    }
+
+    // Сохраняем состояние каждой комнаты (только то, что меняется)
+    for (const [globalRoomId, room] of this.rooms.entries()) {
+      gameData.worldState.rooms[globalRoomId] = {
+        items: room.items,
+      };
+    }
+
     localStorage.setItem('mudgame_save', JSON.stringify(gameData));
   }
 
@@ -1650,6 +1687,31 @@ export class GameEngine {
 
       this.player.load(gameData.player);
       
+      // Применяем сохраненное состояние мира поверх стандартного
+      if (gameData.worldState) {
+        // Восстанавливаем состояние NPC
+        if (gameData.worldState.npcs) {
+          for (const [globalNpcId, npcState] of Object.entries(gameData.worldState.npcs)) {
+            const npc = this.npcs.get(globalNpcId);
+            if (npc) {
+              npc.hitPoints = npcState.hitPoints;
+            }
+          }
+        }
+        // Восстанавливаем состояние комнат (предметы на полу)
+        if (gameData.worldState.rooms) {
+          for (const [globalRoomId, roomState] of Object.entries(gameData.worldState.rooms)) {
+            const room = this.rooms.get(globalRoomId);
+            if (room) {
+              room.items = roomState.items;
+            }
+          }
+        }
+        // Восстанавливаем карту расположения NPC
+        this.npcLocationMap = new Map(gameData.worldState.npcLocations || []);
+        this._syncRoomsFromNpcMap();
+      }
+
       // Сбрасываем временные состояния игрока, которые не должны сохраняться
       if (this.player.state === 'fighting') {
         this.player.state = 'idle';
