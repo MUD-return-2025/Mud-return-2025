@@ -1017,4 +1017,60 @@ ${this.getCurrentRoom().getFullDescription(this)}
     const newRoom = this.getCurrentRoom();
     return { success: true, message: `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}` };
   }
+
+  /**
+   * Генерирует сгруппированный список доступных действий для игрока в текущей комнате.
+   * @returns {Array<Array<{label: string, command: string, danger?: boolean}>>}
+   */
+  getAvailableActions() {
+    const actionGroups = [];
+    const currentRoom = this.getCurrentRoom();
+    if (!currentRoom) return [];
+
+    // --- Группа: Базовые действия ---
+    const baseActions = [
+      { label: '👁️ Осмотреться', command: 'look' },
+      { label: '💾 Сохранить', command: 'save' },
+      { label: '❓ Помощь', command: 'help' }
+    ];
+    actionGroups.push(baseActions);
+
+    // --- Группа: Действия с NPC ---
+    const npcActions = [];
+    const npcsInRoom = currentRoom.npcs
+      .map(npcId => this.getNpc(npcId, currentRoom.area))
+      .filter(npc => npc && npc.isAlive());
+
+    if (npcsInRoom.some(npc => npc.canTrade && npc.canTrade())) {
+      npcActions.push({ label: '💰 Торговать', command: 'list' });
+    }
+    if (npcsInRoom.some(npc => npc.canHeal)) {
+      npcActions.push({ label: '✨ Исцелиться', command: 'heal' });
+    }
+
+    for (const npc of npcsInRoom) {
+      npcActions.push({ label: `👁️ Осмотреть ${npc.name}`, command: `look ${npc.name}` });
+      npcActions.push({ label: `🤔 Оценить ${npc.name}`, command: `consider ${npc.name}` });
+      if (npc.dialogue && npc.dialogue.length > 0) {
+        npcActions.push({ label: `💬 Поговорить с ${npc.name}`, command: `talk ${npc.name}` });
+      }
+      if (npc.type === 'hostile') {
+        npcActions.push({ label: `⚔️ Убить ${npc.name}`, command: `kill ${npc.name}`, danger: true });
+      }
+    }
+    if (npcActions.length > 0) actionGroups.push(npcActions);
+
+    // --- Группа: Действия с предметами ---
+    const itemActions = currentRoom.items
+      .map(globalItemId => this.items.get(globalItemId))
+      .filter(Boolean)
+      .flatMap(item => ([
+        { label: `👁️ Осмотреть ${item.name}`, command: `look ${item.name}` },
+        { label: `🤔 Оценить ${item.name}`, command: `consider ${item.name}` },
+        { label: `✋ Взять ${item.name}`, command: `get ${item.name}` }
+      ]));
+    if (itemActions.length > 0) actionGroups.push(itemActions);
+
+    return actionGroups;
+  }
 }

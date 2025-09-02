@@ -30,6 +30,7 @@
       :player="gameEngine.player"
       :game-started="gameStarted"
       :game-engine="gameEngine"
+      :update-counter="updateCounter"
       @command="executeCommand"
       @move="handleMove"
     />
@@ -57,6 +58,8 @@ const commandHistory = ref([]);
 const historyIndex = ref(0);
 /** @type {string} Временное хранилище для текста в поле ввода при навигации по истории. */
 let tempInputOnNavStart = '';
+/** @type {import('vue').Ref<number>} Счетчик для принудительного обновления дочерних компонентов. */
+const updateCounter = ref(0);
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент вывода терминала. */
 const outputElement = ref(null);
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент поля ввода. */
@@ -129,6 +132,7 @@ const executeCommand = async (command) => {
   if (result) gameMessages.value.push(...result.split('\n'));
 
   // Автосохранение каждые несколько команд для удобства.
+  updateCounter.value++;
   if (gameMessages.value.length % 10 === 0) {
     gameEngine.saveGame();
   }
@@ -144,6 +148,7 @@ const handleMove = (message) => {
   gameMessages.value.push(message);
   
   // Автосохранение после каждого перемещения.
+  updateCounter.value++;
   gameEngine.saveGame();
 };
 
@@ -199,6 +204,7 @@ onMounted(() => {
   // Подписываемся на асинхронные сообщения от движка (например, раунды боя).
   gameEngine.on('message', (message) => {
     if (message) {
+      updateCounter.value++;
       gameMessages.value.push(...message.split('\n'));
     }
   });
@@ -210,6 +216,7 @@ onMounted(() => {
       // 1. Обрабатываем события, происходящие с течением времени (игровой тик).
       const tickMessages = gameEngine.tick();
       if (tickMessages.length > 0) {
+        updateCounter.value++;
         gameMessages.value.push(...tickMessages);
       }
 

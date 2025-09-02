@@ -1,6 +1,7 @@
 <script setup>
 // Компонент Vue для отображения панели статистики игрока, инвентаря, экипировки и карты.
 import { ref, computed, inject, watch } from 'vue';
+import ActionsPanel from './ActionsPanel.vue';
 
 /**
  * @property {Object} player - Объект с данными игрока.
@@ -19,6 +20,10 @@ const props = defineProps({
   },
   gameEngine: {
     type: Object,
+    required: true
+  },
+  updateCounter: {
+    type: Number,
     required: true
   }
 });
@@ -231,41 +236,29 @@ const currentRoom = computed(() => {
   return props.gameEngine.rooms.get(props.player.currentRoom);
 });
 
-/**
- * @description Вычисляемое свойство, возвращающее список живых NPC в текущей комнате.
- * Зависит от `props.updateCounter`, чтобы принудительно пересчитываться,
- * когда движок сообщает об изменениях (например, смерть NPC).
- * @type {import('vue').ComputedRef<import('../../game/classes/NPC').NPC[]>}
- */
-const npcsInRoom = computed(() => {
-  if (!currentRoom.value) return [];
-  const areaId = currentRoom.value.area;
-  return currentRoom.value.npcs
-    .map(npcId => props.gameEngine.getNpc(npcId, areaId))
-    .filter(npc => npc && npc.isAlive());
-});
-
-/**
- * @description Вычисляемое свойство, возвращающее список предметов в текущей комнате.
- * Зависит от `props.updateCounter` для принудительной перерисовки.
- * @type {import('vue').ComputedRef<Object[]>}
- */
-const itemsInRoom = computed(() => {
-  if (!currentRoom.value) return [];
-  return currentRoom.value.items
-    .map(globalItemId => props.gameEngine.items.get(globalItemId))
-    .filter(Boolean);
-});
-
 /** @description Вычисляемое свойство, проверяющее, есть ли торговец в комнате. */
-const hasTrader = computed(() => npcsInRoom.value.some(npc => npc.canTrade && npc.canTrade()));
-/** @description Вычисляемое свойство, проверяющее, есть ли целитель в комнате. */
-const hasHealer = computed(() => npcsInRoom.value.some(npc => npc.canHeal));
+const hasTrader = computed(() => {
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter;
+  const room = currentRoom.value;
+  if (!room) return false;
+  return room.npcs.some(npcId => {
+    const npc = props.gameEngine.getNpc(npcId, room.area);
+    return npc && npc.isAlive() && npc.canTrade && npc.canTrade();
+  });
+});
 
 /** @description Вычисляемое свойство, возвращающее NPC-торговца в текущей комнате. */
 const traderInRoom = computed(() => {
-  if (!hasTrader.value) return null;
-  return npcsInRoom.value.find(npc => npc.canTrade && npc.canTrade());
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter;
+  const room = currentRoom.value;
+  if (!room) return null;
+  const traderId = room.npcs.find(npcId => {
+    const npc = props.gameEngine.getNpc(npcId, room.area);
+    return npc && npc.isAlive() && npc.canTrade && npc.canTrade();
+  });
+  return traderId ? props.gameEngine.getNpc(traderId, room.area) : null;
 });
 
 /** @description Вычисляемое свойство, возвращающее список товаров торговца. */
@@ -276,6 +269,13 @@ const traderItems = computed(() => {
   return shopItemIds
     .map(itemId => props.gameEngine.getItem(itemId, areaId))
     .filter(Boolean);
+});
+
+/** @description Вычисляемое свойство, возвращающее список доступных действий. */
+const availableActionGroups = computed(() => {
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter;
+  return props.gameEngine.getAvailableActions ? props.gameEngine.getAvailableActions() : [];
 });
 
 /** @description Вычисляемое свойство, возвращающее список изученных умений. */
@@ -546,50 +546,11 @@ const learnedSkills = computed(() => {
             </div>
           </div>
 
-          <div class="map-actions">
-            <h4>Действия</h4>
-            <div class="action-buttons">
-              <button class="action-btn" @click="$emit('command', 'look')">👁️ Осмотреться</button>
-              <button class="action-btn" @click="$emit('command', 'save')">💾 Сохранить</button>
-              <button class="action-btn" @click="$emit('command', 'help')">❓ Помощь</button>
-              
-              <hr v-if="hasTrader || hasHealer || npcsInRoom.length || itemsInRoom.length" class="actions-divider" />
+          <ActionsPanel
+            :action-groups="availableActionGroups"
+            @command="$emit('command', $event)"
+          />
 
-              <button class="action-btn" v-if="hasTrader" @click="$emit('command', 'list')">💰 Торговать</button>
-              <button class="action-btn" v-if="hasHealer" @click="$emit('command', 'heal')">✨ Исцелиться</button>
-              
-              <template v-for="npc in npcsInRoom" :key="npc.id">
-                <button class="action-btn" @click="$emit('command', 'look ' + npc.name)">
-                  👁️ Осмотреть {{ npc.name }}
-                </button>
-                <button class="action-btn" @click="$emit('command', 'consider ' + npc.name)">
-                  🤔 Оценить {{ npc.name }}
-                </button>
-                <button class="action-btn" @click="$emit('command', 'talk ' + npc.name)">
-                  💬 Поговорить с {{ npc.name }}
-                </button>
-                <button
-                  v-if="npc.type === 'hostile'"
-                  @click="$emit('command', 'kill ' + npc.name)"
-                  class="action-btn danger"
-                >
-                  ⚔️ Убить {{ npc.name }}
-                </button>
-              </template>
-
-              <template v-for="item in itemsInRoom" :key="item.id">
-                <button class="action-btn" @click="$emit('command', 'look ' + item.name)">
-                  👁️ Осмотреть {{ item.name }}
-                </button>
-                <button class="action-btn" @click="$emit('command', 'consider ' + item.name)">
-                  🤔 Оценить {{ item.name }}
-                </button>
-                <button class="action-btn" @click="$emit('command', 'get ' + item.name)">
-                  ✋ Взять {{ item.name }}
-                </button>
-              </template>
-            </div>
-          </div>
         </div>
       </div>
     </div>
@@ -986,24 +947,6 @@ const learnedSkills = computed(() => {
 
 .legend-color.unavailable {
   background-color: #333;
-}
-
-.map-actions {
-  margin-top: 20px;
-  border-top: 1px solid #00ff00;
-  padding-top: 10px;
-}
-
-.map-actions h4 {
-  color: #ffff00;
-  margin: 0 0 10px 0;
-  font-size: 12px;
-}
-
-.action-buttons {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
 }
 
 .actions-divider {
