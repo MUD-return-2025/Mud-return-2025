@@ -9,44 +9,34 @@ export class Player {
    * @param {string} [name='Игрок'] - Имя игрока.
    */
   constructor(name = 'Игрок') {
-    /** @type {string} Имя игрока. */
+    this.reset(name);
+  }
+
+  /**
+   * Сбрасывает состояние игрока до начального.
+   * @param {string} [name='Игрок'] - Имя игрока.
+   */
+  reset(name = 'Игрок') {
     this.name = name;
-    /** @type {number} Текущий уровень. */
     this.level = 1;
-    /** @type {number} Текущее количество опыта. */
     this.experience = 0;
-    /** @type {number} Опыта до следующего уровня. */
     this.experienceToNext = 100;
-    /** @type {number} Текущее здоровье. */
     this.hitPoints = 20;
-    /** @type {number} Максимальное здоровье. */
     this.maxHitPoints = 20;
-    
-    // Базовые характеристики
     this.strength = 10;
     this.dexterity = 10;
     this.constitution = 10;
     this.intelligence = 10;
     this.wisdom = 10;
     this.charisma = 10;
-    
-    /** @type {object[]} Инвентарь игрока. */
     this.inventory = [];
-    /** @type {string} Глобальный ID текущей комнаты. */
-    this.currentRoom = 'center';
-    /** @type {'idle'|'fighting'|'dead'} Текущее состояние игрока. */
+    this.currentRoom = 'midgard:center';
     this.state = 'idle';
-    /** @type {object|null} Экипированное оружие. */
     this.equippedWeapon = null;
-    /** @type {object|null} Экипированная броня. */
     this.equippedArmor = null;
-    /** @type {Set<string>} Набор ID изученных умений. */
     this.skills = new Set();
-    /** @type {string|null} Умение, которое будет использовано в следующей атаке. */
     this.nextAttackIsSkill = null;
-    /** @type {boolean} Использовал ли игрок умение в текущем раунде боя. */
     this.skillUsedThisRound = false;
-    /** @type {string|null} Глобальный ID комнаты, где игрок умер. */
     this.deathRoom = null;
   }
 

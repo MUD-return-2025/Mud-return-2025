@@ -27,10 +27,9 @@
     </div>
 
     <PlayerStatsPanel
-      :player="player" 
+      :player="gameEngine.player"
       :game-started="gameStarted"
       :game-engine="gameEngine"
-      :update-counter="updateCounter"
       @command="executeCommand"
       @move="handleMove"
     />
@@ -38,14 +37,14 @@
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick, watch } from 'vue';
+import { ref, reactive, onMounted, nextTick, watch, computed } from 'vue';
 import { GameEngine } from '../../game/GameEngine.js';
 import PlayerStatsPanel from './PlayerStatsPanel.vue';
 
 // --- Состояние компонента ---
 
 /** @type {GameEngine} Экземпляр игрового движка. */
-const gameEngine = new GameEngine();
+const gameEngine = reactive(new GameEngine());
 /** @type {import('vue').Ref<string[]>} Массив сообщений для вывода в терминал. */
 const gameMessages = ref([]);
 /** @type {import('vue').Ref<string>} Текущий текст в поле ввода. */
@@ -58,17 +57,12 @@ const commandHistory = ref([]);
 const historyIndex = ref(0);
 /** @type {string} Временное хранилище для текста в поле ввода при навигации по истории. */
 let tempInputOnNavStart = '';
-/** @type {import('vue').Ref<number>} Счетчик обновлений для принудительной перерисовки дочерних компонентов. */
-const updateCounter = ref(0);
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент вывода терминала. */
 const outputElement = ref(null);
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент поля ввода. */
 const inputElement = ref(null);
 /** @type {import('vue').Ref<boolean>} Флаг полноэкранного режима. */
 const isFullscreen = ref(false);
-
-/** @type {import('../../game/classes/Player').Player} Реактивный объект игрока. */
-const player = reactive(gameEngine.player);
 
 /**
  * Переключает полноэкранный режим терминала.
@@ -176,7 +170,6 @@ const processCommand = async () => {
       const welcomeMsg = await gameEngine.startNewGame(playerName);
       gameMessages.value = welcomeMsg.split('\n');
       gameStarted.value = true;
-      Object.assign(player, gameEngine.player);
     } else if (command.toLowerCase() === 'load') {
       const loaded = await gameEngine.loadGame();
       if (loaded) {
@@ -184,7 +177,6 @@ const processCommand = async () => {
         const currentRoom = gameEngine.getCurrentRoom();
         gameMessages.value.push('', currentRoom.getFullDescription(gameEngine));
         gameStarted.value = true;
-        Object.assign(player, gameEngine.player);
       } else {
         gameMessages.value.push('Сохранение не найдено. Используйте "new" для новой игры.');
       }
@@ -204,17 +196,6 @@ onMounted(() => {
   inputElement.value?.focus();
   historyIndex.value = commandHistory.value.length;
 
-  // Подписываемся на событие 'update' от игрового движка.
-  // Это позволяет UI реагировать на изменения состояния игрока (HP, статы и т.д.).
-  gameEngine.on('update', () => {
-    // Обновляем реактивный объект игрока, чтобы UI (панель статистики) перерисовался.
-    const newPlayerState = { ...gameEngine.player };
-    // Принудительно создаем новый массив инвентаря, чтобы Vue точно отследил изменения
-    newPlayerState.inventory = [...gameEngine.player.inventory];
-    Object.assign(player, newPlayerState);
-    updateCounter.value++;
-  });
-
   // Подписываемся на асинхронные сообщения от движка (например, раунды боя).
   gameEngine.on('message', (message) => {
     if (message) {
@@ -226,8 +207,8 @@ onMounted(() => {
   // Основной игровой цикл (тикер), запускается каждую секунду.
   setInterval(() => {
     if (gameStarted.value) {
-      // 1. Обрабатываем асинхронные события движка (например, респавн NPC, блуждание).
-      const tickMessages = gameEngine.update();
+      // 1. Обрабатываем события, происходящие с течением времени (игровой тик).
+      const tickMessages = gameEngine.tick();
       if (tickMessages.length > 0) {
         gameMessages.value.push(...tickMessages);
       }

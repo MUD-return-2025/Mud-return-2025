@@ -323,10 +323,10 @@ export class GameEngine {
   }
 
   /**
-   * Основной метод обновления, вызываемый в игровом цикле.
+   * Обрабатывает события, происходящие с течением времени (игровой тик).
    * @returns {string[]} Массив сообщений, сгенерированных за один тик.
    */
-  update() {
+  tick() {
     const messages = this.checkRespawns();
     const wanderMessages = this.updateWanderingNpcs();
     return [...messages, ...wanderMessages];
@@ -353,7 +353,6 @@ export class GameEngine {
           if (this.player.currentRoom === entry.roomId) {
               // Если игрок в комнате, сообщаем ему о возрождении
               messages.push(this.colorize(`${npc.name} появляется из тени!`, 'combat-npc-death'));
-              this.emit('update'); // Оповещаем UI об обновлении
           }
         }
         return false; // Удаляем из очереди
@@ -395,10 +394,8 @@ export class GameEngine {
               // Если игрок в одной из комнат, оповещаем его
               if (this.player.currentRoom === currentNpcRoomId) {
                 messages.push(this.colorize(`${npc.name} уходит в сторону (${randomExitDirection}).`, 'npc-neutral'));
-                this.emit('update');
               } else if (this.player.currentRoom === targetRoomId) {
                 messages.push(this.colorize(`${npc.name} приходит откуда-то.`, 'npc-neutral'));
-                this.emit('update');
               }
             }
           }
@@ -559,8 +556,6 @@ export class GameEngine {
     
     this.player.currentRoom = targetRoomId;
     const newRoom = this.getCurrentRoom();
-    this.emit('update');
-    
     return `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}`;
   }
 
@@ -671,7 +666,6 @@ export class GameEngine {
     // Начинаем бой
     this.player.state = 'fighting';
     this.combatTarget = this._getGlobalId(npcId, currentAreaId);
-    this.emit('update'); // Обновляем UI для отображения состояния боя
     
     // Запускаем боевой цикл
     const initialAttackMessage = `Вы атакуете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}!`;
@@ -852,7 +846,6 @@ export class GameEngine {
     this.player.nextAttackIsSkill = null;
     this.player.skillUsedThisRound = false;
     this.combatTarget = null;
-    this.emit('update');
   }
 
   /**
@@ -1073,8 +1066,6 @@ export class GameEngine {
     }
     this.player.currentRoom = respawnRoomId;
 
-    this.emit('update'); // Обновляем UI
-
     const respawnRoom = this.rooms.get(respawnRoomId);
 
     return this.colorize('Вы чувствуете, как жизнь возвращается в ваше тело. Мир вновь обретает краски.', 'player-respawn') + `\n\n` +
@@ -1093,7 +1084,6 @@ export class GameEngine {
         message += `\nВы изучили новое умение: ${this.colorize(skillData.name, 'combat-exp-gain')}!`;
       }
     }
-    this.emit('update');
     return message.trim();
   }
 
@@ -1228,7 +1218,6 @@ export class GameEngine {
         break;
     }
 
-    this.emit('update');
     return message;
   }
 
@@ -1733,8 +1722,8 @@ export class GameEngine {
   async startNewGame(playerName = 'Игрок') {
     this._resetWorldState();
     this.messageHistory = [];
-    await this.initializeWorld();
-    this.player = new Player(playerName);
+    this.player.reset(playerName);
+    await this.initializeWorld(); // Мир загружается после сброса игрока
     this.checkAndAwardSkills(); // Проверяем умения на 1 уровне
     this.gameState = 'playing';
     

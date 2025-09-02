@@ -6,7 +6,6 @@ import { ref, computed, inject, watch } from 'vue';
  * @property {Object} player - Объект с данными игрока.
  * @property {Boolean} gameStarted - Флаг, указывающий, началась ли игра.
  * @property {Object} gameEngine - Экземпляр игрового движка.
- * @property {Number} updateCounter - Счетчик обновлений для принудительной перерисовки.
  */
 const props = defineProps({
   player: {
@@ -19,10 +18,6 @@ const props = defineProps({
   },
   gameEngine: {
     type: Object,
-    required: true
-  },
-  updateCounter: {
-    type: Number,
     required: true
   }
 });
@@ -134,8 +129,6 @@ const getPlayerDefense = () => {
  * Возвращают массив `[areaId, localRoomId]`.
  */
 const currentRoomIds = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter; // Принудительная реактивность
   if (!props.gameStarted || !props.player.currentRoom) return [null, null];
   return props.gameEngine._parseGlobalId(props.player.currentRoom);
 });
@@ -237,16 +230,12 @@ const moveToRoom = async (localRoomId) => {
  * @type {import('vue').ComputedRef<import('../../game/classes/Room').Room | null>}
  */
 const currentRoom = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter; // Принудительная реактивность
   if (!props.gameStarted || !props.player.currentRoom) return null;
   return props.gameEngine.rooms.get(props.player.currentRoom);
 });
 
 /**
  * @description Вычисляемое свойство, возвращающее список живых NPC в текущей комнате.
- * Зависит от `props.updateCounter`, чтобы принудительно пересчитываться,
- * когда движок сообщает об изменениях (например, смерть NPC).
  * @type {import('vue').ComputedRef<import('../../game/classes/NPC').NPC[]>}
  */
 const npcsInRoom = computed(() => {
@@ -259,7 +248,6 @@ const npcsInRoom = computed(() => {
 
 /**
  * @description Вычисляемое свойство, возвращающее список предметов в текущей комнате.
- * Зависит от `props.updateCounter` для принудительной перерисовки.
  * @type {import('vue').ComputedRef<Object[]>}
  */
 const itemsInRoom = computed(() => {
@@ -293,8 +281,6 @@ const traderItems = computed(() => {
 /** @description Вычисляемое свойство, возвращающее список изученных умений. */
 const learnedSkills = computed(() => {
   if (!props.gameEngine.skillsData.size) return [];
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter; // Принудительная реактивность
   return Array.from(props.player.skills)
     .map(skillId => {
       const skill = props.gameEngine.skillsData.get(skillId);
