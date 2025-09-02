@@ -3,6 +3,7 @@ import { Player } from './classes/Player.js';
 import { Room } from './classes/Room.js';
 import { NPC } from './classes/NPC.js';
 import { CommandParser } from './classes/CommandParser.js';
+import { DamageParser } from './utils/damageParser.js';
 
 /**
  * Основной игровой движок
@@ -725,11 +726,21 @@ export class GameEngine {
     let attackMessage = 'Вы наносите';
     if (usedSkillId) {
       const skillData = this.skillsData.get(usedSkillId);
-      attackMessage = `Вы используете "${skillData.name}" и наносите`;
+      if (skillData) {
+        attackMessage = `Вы используете "${skillData.name}" и наносите`;
+      } else {
+        console.warn(`Player has skill "${usedSkillId}" but it's not found in skillsData.`);
+        attackMessage = `Вы пытаетесь использовать неизвестное умение и наносите`;
+      }
     }
     const npcAlive = npc.takeDamage(playerDamage);
     result += ' \n' + this.colorize(`${attackMessage} ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack');
     
+    if (npcAlive) {
+      const npcHealthPercent = Math.round((npc.hitPoints / npc.maxHitPoints) * 100);
+      result += '\n' + this.colorize(`У ${this.colorize(npc.name, `npc-name npc-${npc.type}`)} осталось ${npcHealthPercent}% здоровья.`, 'combat-player-hp');
+    }
+
     if (!npcAlive) {
       // НПС умер от атаки игрока
       result += '\n' + this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} повержен!`, 'combat-npc-death');
@@ -1267,8 +1278,8 @@ export class GameEngine {
     };
 
     if (newItem.type === 'weapon') {
-      const newItemDamage = this._parseDamageString(newItem.damage).avg;
-      const equippedItemDamage = this._parseDamageString(equippedItem.damage).avg;
+      const newItemDamage = new DamageParser(newItem.damage).avg();
+      const equippedItemDamage = new DamageParser(equippedItem.damage).avg();
       comparison += compareStat('Средний урон', newItemDamage, equippedItemDamage);
     }
     
@@ -1440,7 +1451,7 @@ export class GameEngine {
     const playerAvgDamage = this._calculateAvgPlayerDamage();
     
     const npcHp = npc.hitPoints;
-    const npcAvgDamage = this._parseDamageString(npc.damage).avg;
+    const npcAvgDamage = new DamageParser(npc.damage).avg();
 
     // Избегаем деления на ноль
     if (playerAvgDamage <= 0) {
@@ -1486,7 +1497,7 @@ export class GameEngine {
     
     // Бонус от оружия
     if (this.player.equippedWeapon && this.player.equippedWeapon.damage) {
-      avgDamage = this._parseDamageString(this.player.equippedWeapon.damage).avg + strBonus;
+      avgDamage = new DamageParser(this.player.equippedWeapon.damage).avg() + strBonus;
     } else {
       avgDamage += strBonus;
     }
@@ -1544,30 +1555,6 @@ export class GameEngine {
     return [parts[0], parts.slice(1).join(':')];
   }
   /**
-   * Разбирает строку урона (например, "1d6+2") и возвращает среднее и максимальное значение.
-   * @param {string} damageString - Строка урона.
-   * @returns {{avg: number, max: number}}
-   * @private
-   */
-  _parseDamageString(damageString) {
-    if (!damageString) return { avg: 0, max: 0 };
-    // Регулярное выражение для разбора строки: (количество кубиков)d(размер кубика)+/-(модификатор)
-    const match = damageString.match(/(\d+)d(\d+)(?:([+-])(\d+))?/);
-    if (!match) {
-      return { avg: 1, max: 1 };
-    }
-    
-    const [, diceCountStr, diceSizeStr, operator, modifierStr] = match;
-    const diceCount = parseInt(diceCountStr);
-    const diceSize = parseInt(diceSizeStr);
-    const modifier = (operator && modifierStr) ? (operator === '+' ? parseInt(modifierStr) : -parseInt(modifierStr)) : 0;
-    
-    const avg = diceCount * (diceSize / 2 + 0.5) + modifier;
-    const max = diceCount * diceSize + modifier;
-
-    return { avg, max };
-  }
-  /**
    * Сохранение игры в localStorage
    */
   saveGame() {
@@ -1615,6 +1602,9 @@ export class GameEngine {
     try {
       const gameData = JSON.parse(saveData);
       
+      // Инициализируем базовые данные, такие как умения, перед загрузкой состояния
+      await this.initializeSkills();
+
       // Загружаем все зоны, которые были активны в сохраненной игре
       for (const areaId of gameData.loadedAreaIds) {
         await this.loadArea(areaId);
@@ -1623,6 +1613,23 @@ export class GameEngine {
       // Загружаем данные игрока
       this.player.load(gameData.player);
       
+      // Сбрасываем состояния, которые не должны сохраняться между сессиями
+      // 1. Боевое состояние
+      if (this.player.state === 'fighting') {
+        this.player.state = 'idle';
+      }
+      this.combatTarget = null;
+      if (this.combatInterval) {
+        clearInterval(this.combatInterval);
+        this.combatInterval = null;
+      }
+
+      // 2. Очередь возрождения (чтобы избежать возрождения NPC из старой сессии)
+      this.respawnQueue = [];
+
+      // 3. Состояние игры
+      this.gameState = 'playing';
+
       return true;
     } catch (error) {
       console.error('Ошибка загрузки:', error);

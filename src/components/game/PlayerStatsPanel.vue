@@ -134,6 +134,8 @@ const getPlayerDefense = () => {
  * Возвращают массив `[areaId, localRoomId]`.
  */
 const currentRoomIds = computed(() => {
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter; // Принудительная реактивность
   if (!props.gameStarted || !props.player.currentRoom) return [null, null];
   return props.gameEngine._parseGlobalId(props.player.currentRoom);
 });
@@ -235,6 +237,8 @@ const moveToRoom = async (localRoomId) => {
  * @type {import('vue').ComputedRef<import('../../game/classes/Room').Room | null>}
  */
 const currentRoom = computed(() => {
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter; // Принудительная реактивность
   if (!props.gameStarted || !props.player.currentRoom) return null;
   return props.gameEngine.rooms.get(props.player.currentRoom);
 });
@@ -247,8 +251,6 @@ const currentRoom = computed(() => {
  */
 const npcsInRoom = computed(() => {
   if (!currentRoom.value) return [];
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter; // Принудительная реактивность при обновлении из движка
   const areaId = currentRoom.value.area;
   return currentRoom.value.npcs
     .map(npcId => props.gameEngine.getNpc(npcId, areaId))
@@ -262,8 +264,6 @@ const npcsInRoom = computed(() => {
  */
 const itemsInRoom = computed(() => {
   if (!currentRoom.value) return [];
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter; // Принудительная реактивность при обновлении из движка
   return currentRoom.value.items
     .map(globalItemId => props.gameEngine.items.get(globalItemId))
     .filter(Boolean);

@@ -1,4 +1,5 @@
 
+import { DamageParser } from '../utils/damageParser.js';
 /**
  * Представляет неигрового персонажа (NPC), который может быть дружелюбным,
  * нейтральным или враждебным. Управляет его состоянием, диалогами и действиями.
@@ -86,36 +87,7 @@ export class NPC {
    * @returns {number} Количество урона.
    */
   rollDamage() {
-    return this.parseDamageString(this.damage);
-  }
-
-  /**
-   * Разбирает строку урона (например, "1d6+2") и возвращает случайное значение.
-   * @param {string} damageString - Строка урона.
-   * @returns {number} Итоговый урон.
-   */
-  parseDamageString(damageString) {
-    // Регулярное выражение для разбора строки: (количество кубиков)d(размер кубика)+/-
-    const match = damageString?.match(/(\d+)d(\d+)(?:([+-])(\d+))?/);
-    if (!match) {
-      return 1; // базовый урон если не удалось распарсить
-    }
-    
-    const [, diceCount, diceSize, operator, modifier] = match;
-    
-    // Бросаем кубики
-    let total = 0;
-    for (let i = 0; i < parseInt(diceCount); i++) {
-      total += Math.floor(Math.random() * parseInt(diceSize)) + 1;
-    }
-    
-    // Применяем модификатор
-    if (operator && modifier) {
-      const mod = parseInt(modifier);
-      total += operator === '+' ? mod : -mod;
-    }
-    
-    return Math.max(1, total); // минимум 1 урона
+    return new DamageParser(this.damage).roll();
   }
 
   /**
