@@ -1,6 +1,7 @@
 <script setup>
 // Компонент Vue для отображения панели статистики игрока, инвентаря, экипировки и карты.
 import { ref, computed, inject, watch } from 'vue';
+import EquipmentPanel from './EquipmentPanel.vue';
 import InventoryPanel from './InventoryPanel.vue';
 import ActionsPanel from './ActionsPanel.vue';
 
@@ -53,35 +54,6 @@ const tabs = [
  */
 const togglePanel = () => {
   isExpanded.value = !isExpanded.value;
-};
-
-/**
- * Рассчитывает урон игрока.
- * @returns {string} Строка, представляющая урон (например, "1d6+2").
- */
-const getPlayerDamage = () => {
-  let baseDamage = '1d6';
-  const strBonus = Math.floor((props.player.strength - 10) / 2);
-
-  if (props.player.equippedWeapon) {
-    baseDamage = props.player.equippedWeapon.damage || '1d6';
-  }
-
-  if (strBonus > 0) {
-    return `${baseDamage}+${strBonus}`;
-  } else if (strBonus < 0) {
-    return `${baseDamage}${strBonus}`;
-  }
-
-  return baseDamage;
-};
-
-/**
- * Рассчитывает защиту игрока.
- * @returns {number} Значение защиты.
- */
-const getPlayerDefense = () => {
-  return props.player.getTotalDefense ? props.player.getTotalDefense() : 10;
 };
 
 /**
@@ -294,40 +266,11 @@ const learnedSkills = computed(() => {
         </div>
 
         <!-- Вкладка "Экипировка" -->
-        <div v-if="activeTab === 'equipment'" class="equipment-content">
-          <div class="equipment-slot">
-            <div class="slot-label">⚔️ Оружие:</div>
-            <div v-if="player.equippedWeapon" class="equipped-item">
-              <span class="item-name">{{ player.equippedWeapon.name }}</span>
-              <button 
-                @click="$emit('command', 'unequip weapon')"
-                class="unequip-btn"
-              >
-                Снять
-              </button>
-            </div>
-            <div v-else class="empty-slot">Не экипировано</div>
-          </div>
-
-          <div class="equipment-slot">
-            <div class="slot-label">🛡️ Броня:</div>
-            <div v-if="player.equippedArmor" class="equipped-item">
-              <span class="item-name">{{ player.equippedArmor.name }}</span>
-              <button 
-                @click="$emit('command', 'unequip armor')"
-                class="unequip-btn"
-              >
-                Снять
-              </button>
-            </div>
-            <div v-else class="empty-slot">Не экипировано</div>
-          </div>
-
-          <div class="combat-stats">
-            <h4>⚔️ Боевые характеристики</h4>
-            <div class="stat-line">Урон: {{ getPlayerDamage() }}</div>
-            <div class="stat-line">Защита: {{ getPlayerDefense() }}</div>
-          </div>
+        <div v-if="activeTab === 'equipment'">
+          <EquipmentPanel
+            :player="player"
+            @command="$emit('command', $event)"
+          />
         </div>
 
         <!-- Вкладка "Мини-карта" -->
