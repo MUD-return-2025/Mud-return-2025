@@ -94,6 +94,12 @@ const hostileNpcsInRoom = computed(() => {
     .map(npcId => props.gameEngine.getNpc(npcId, currentRoom.value.area))
     .filter(npc => npc && npc.isAlive() && npc.type === 'hostile');
 });
+
+/** @description Вычисляемое свойство, находящее первое зелье лечения в инвентаре. */
+const healingPotion = computed(() => {
+  if (!props.player || !props.player.inventory) return null;
+  return props.player.inventory.find(item => item.type === 'potion' && item.healAmount);
+});
 </script>
 
 <template>
@@ -171,6 +177,29 @@ const hostileNpcsInRoom = computed(() => {
                   → {{ npc.name }}
                 </button>
               </div>
+            </div>
+          </div>
+
+          <div v-if="healingPotion" class="stat-group">
+            <h4>⚡ Быстрые действия</h4>
+            <div class="quick-actions">
+              <button
+                class="action-btn"
+                @click="$emit('command', `use ${healingPotion.name}`)"
+                :disabled="player.hitPoints >= player.maxHitPoints"
+                :title="player.hitPoints >= player.maxHitPoints ? 'Вы полностью здоровы' : `Использовать ${healingPotion.name}`"
+              >
+                💖 Лечиться ({{ healingPotion.name }})
+              </button>
+            </div>
+          </div>
+
+          <div v-if="player.state === 'fighting'" class="stat-group">
+            <h4>⚔️ Действия в бою</h4>
+            <div class="combat-actions">
+                <button class="action-btn danger" @click="$emit('command', 'flee')">
+                  Сбежать
+                </button>
             </div>
           </div>
         </div>
@@ -372,6 +401,14 @@ const hostileNpcsInRoom = computed(() => {
   color: #ff4444;
 }
 
+.action-btn:disabled,
+.action-btn:disabled:hover {
+  border-color: #555;
+  color: #555;
+  background-color: transparent;
+  cursor: not-allowed;
+}
+
 .action-btn.danger:hover {
   background-color: #ff4444;
   color: #000;
@@ -391,6 +428,18 @@ const hostileNpcsInRoom = computed(() => {
 }
 
 .skill-actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.combat-actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
+.quick-actions {
   display: flex;
   gap: 5px;
   flex-wrap: wrap;
