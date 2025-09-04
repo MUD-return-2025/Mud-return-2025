@@ -84,6 +84,16 @@ const learnedSkills = computed(() => {
     })
     .filter(Boolean);
 });
+
+/** @description Вычисляемое свойство, возвращающее список враждебных NPC в комнате. */
+const hostileNpcsInRoom = computed(() => {
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter;
+  if (!currentRoom.value) return [];
+  return currentRoom.value.npcs
+    .map(npcId => props.gameEngine.getNpc(npcId, currentRoom.value.area))
+    .filter(npc => npc && npc.isAlive() && npc.type === 'hostile');
+});
 </script>
 
 <template>
@@ -146,10 +156,21 @@ const learnedSkills = computed(() => {
           <div v-if="learnedSkills.length > 0" class="stat-group">
             <h4>📚 Умения</h4>
             <div v-for="skill in learnedSkills" :key="skill.id" class="skill-item" :title="skill.description">
-              <span class="skill-name">{{ skill.name }}</span>
-              <button class="action-btn" @click="$emit('command', skill.id)">
-                {{ skill.name }}
-              </button>
+              <div class="skill-name">{{ skill.name }}</div>
+              <div class="skill-actions">
+                <button class="action-btn" @click="$emit('command', skill.id)">
+                  Использовать
+                </button>
+                <button
+                  v-for="npc in hostileNpcsInRoom"
+                  :key="npc.id"
+                  class="action-btn"
+                  @click="$emit('command', `${skill.id} ${npc.name}`)"
+                  :title="`Применить '${skill.name}' к ${npc.name}`"
+                >
+                  → {{ npc.name }}
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -367,6 +388,12 @@ const learnedSkills = computed(() => {
 .skill-name {
   color: #00ff00;
   font-weight: bold;
+}
+
+.skill-actions {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
 }
 
 

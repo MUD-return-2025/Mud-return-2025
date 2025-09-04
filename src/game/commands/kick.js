@@ -49,7 +49,7 @@ export default {
 
     game.player.nextAttackIsSkill = 'kick';
     game.player.skillUsedThisRound = true;
-    const npc = game.npcs.get(game.combatTarget);
+    const npc = game.combatManager.npc;
     return `Вы готовитесь пнуть ${game.colorize(npc.name, `npc-name npc-${npc.type}`)}.`;
   }
 };
