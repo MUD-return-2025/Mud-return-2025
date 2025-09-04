@@ -137,6 +137,14 @@ export class Player {
   }
 
   /**
+   * Проверяет, жив ли игрок.
+   * @returns {boolean}
+   */
+  isAlive() {
+    return this.hitPoints > 0;
+  }
+
+  /**
    * Находит предмет в инвентаре по его имени или ID.
    * @param {string} itemName - Название или ID предмета для поиска (может быть частичным).
    * @returns {object|undefined} Найденный предмет или undefined.

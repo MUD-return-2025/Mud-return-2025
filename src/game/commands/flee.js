@@ -8,12 +8,31 @@ export default {
    * @param {import('../classes/CommandParser').ParsedCommand} cmd
    * @returns {string}
    */
-  execute(game, cmd) {
-    if (game.player.state !== 'fighting') {
+  async execute(game, cmd) {
+    if (!game.combatManager) {
       return 'Вы не в бою.';
     }
-    const npc = game.npcs.get(game.combatTarget);
-    game.stopCombat(true); // playerFled = true
-    return `Вы успешно сбежали от ${game.colorize(npc.name, `npc-name npc-${npc.type}`)}.`;
+
+    const currentRoom = game.getCurrentRoom();
+    const exits = currentRoom.getExits();
+    if (exits.length === 0) {
+      return 'Некуда бежать!';
+    }
+
+    const npc = game.combatManager.npc;
+    const fleeMessage = `Вы в панике сбегаете от ${game.colorize(npc.name, `npc-name npc-${npc.type}`)}.`;
+
+    // Завершаем бой с флагом, что игрок сбежал
+    game.combatManager.stop(true);
+
+    // Выполняем перемещение в случайном направлении
+    const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
+    const exit = currentRoom.getExit(randomExitDirection);
+    const targetRoomId = (typeof exit === 'object')
+      ? game._getGlobalId(exit.room, exit.area)
+      : game._getGlobalId(exit, currentRoom.area);
+
+    const moveResult = await game.moveToRoom(targetRoomId, randomExitDirection);
+    return `${fleeMessage}\n\n${moveResult.message}`;
   }
 };

@@ -134,8 +134,8 @@ export class CommandParser {
    * @returns {string} Сообщение с подсказками.
    */
   getUnknownCommandMessage(command) {
-    const helpText = this.generateHelp().replace('=== СПРАВКА ===\n', 'Доступные команды:\n');
-    return `Неизвестная команда: "${command}"\n\n${helpText}`;
+    const helpText = this.generateHelp().replace('=== СПРАВКА ===', 'Доступные команды:');
+    return `Неизвестная команда: "${command}"\n${helpText}`;
   }
 
   /**

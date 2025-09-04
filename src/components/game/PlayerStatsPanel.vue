@@ -147,8 +147,8 @@ const learnedSkills = computed(() => {
             <h4>📚 Умения</h4>
             <div v-for="skill in learnedSkills" :key="skill.id" class="skill-item" :title="skill.description">
               <span class="skill-name">{{ skill.name }}</span>
-              <button class="action-btn" @click="$emit('command', 'kick')">
-                Пнуть
+              <button class="action-btn" @click="$emit('command', skill.id)">
+                {{ skill.name }}
               </button>
             </div>
           </div>

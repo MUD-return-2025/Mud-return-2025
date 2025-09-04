@@ -2,6 +2,7 @@
 import { Player } from './classes/Player.js';
 import { Room } from './classes/Room.js';
 import { NPC } from './classes/NPC.js';
+import { CombatManager } from './classes/CombatManager.js';
 import { CommandParser } from './classes/CommandParser.js';
 import { DamageParser } from './utils/damageParser.js';
 import commands from './commands/index.js';
@@ -33,8 +34,7 @@ export class GameEngine {
 
     this.messageHistory = []; // История сообщений для вывода в терминал
     this.gameState = 'menu'; // Состояние игры: menu, playing, paused
-    this.combatTarget = null; // Текущая цель в бою (глобальный ID)
-    this.combatTimeout = null; // Таймаут для автоматического боя
+    this.combatManager = null; // Менеджер текущего боя
     this.respawnQueue = []; // Очередь для возрождения НПС
     this.npcLocationMap = new Map(); // Карта <globalNpcId, globalRoomId>
     this.listeners = {}; // Объект для подписчиков на события { eventName: [callback, ...] }
@@ -196,11 +196,11 @@ export class GameEngine {
 
     // Проверка на доступные команды во время боя
     const allowedCombatCommands = ['flee', 'look', 'inventory', 'stats', 'use', 'kick'];
-    if (this.player.state === 'fighting' && !allowedCombatCommands.includes(parsed.command)) {
+    if (this.combatManager && !allowedCombatCommands.includes(parsed.command)) {
       return 'Вы не можете сделать это в бою! Попробуйте `flee` (сбежать).';
     }
 
-    const result = await this.commandParser.executeCommand(parsed, this);    
+    const result = await this.commandParser.executeCommand(parsed, this);
     
     // Добавляем команду и результат в историю
     this.messageHistory.push(`> ${input}`);
@@ -264,11 +264,13 @@ export class GameEngine {
   updateWanderingNpcs() {
     const messages = [];
     const WANDER_CHANCE = 0.05; // 5% шанс в секунду на перемещение
-
+    const combatNpcGlobalId = this.combatManager
+      ? this._getGlobalId(this.combatManager.npc.id, this.combatManager.npc.area)
+      : null;
     for (const [globalNpcId, currentNpcRoomId] of this.npcLocationMap.entries()) {
       const npc = this.npcs.get(globalNpcId);
       // Проверяем, может ли NPC перемещаться и не находится ли он в бою
-      if (npc && npc.canWander && npc.isAlive() && this.combatTarget !== globalNpcId && Math.random() < WANDER_CHANCE) {
+      if (npc && npc.canWander && npc.isAlive() && globalNpcId !== combatNpcGlobalId && Math.random() < WANDER_CHANCE) {
         const currentNpcRoom = this.rooms.get(currentNpcRoomId);
 
         if (currentNpcRoom) {
@@ -360,204 +362,24 @@ export class GameEngine {
   }
 
   /**
-   * Рекурсивный цикл боя, использующий setTimeout для большей надежности.
-   * @private
-   */
-  _combatLoop() {
-    const roundResult = this.performCombatRound();
-    this.emit('message', roundResult);
-
-    if (this.player.state === 'fighting') {
-      this.combatTimeout = setTimeout(() => this._combatLoop(), 2500);
-    }
-  }
-
-  /**
    * Начинает бой с указанным NPC.
    * @param {import('./classes/NPC').NPC} npc - Цель для атаки.
    */
   startCombat(npc) {
-    this.player.state = 'fighting';
-    this.combatTarget = this._getGlobalId(npc.id, npc.area);
-
-    const initialAttackMessage = `Вы атакуете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}!`;
-    const firstRoundResult = this.performCombatRound();
-    this.emit('message', `${initialAttackMessage}\n${firstRoundResult}`);
-
-    // Если бой не закончился, запускаем цикл боя
-    if (this.player.state === 'fighting') {
-      this._combatLoop();
+    if (this.combatManager) {
+      this.emit('message', 'Вы уже в бою!');
+      return;
     }
-  }
-
-  /**
-   * Выполняет раунд боя
-   * @returns {string} результат боевого раунда
-   */
-  performCombatRound() {
-    const npc = this.npcs.get(this.combatTarget);
-    if (!npc || !npc.isAlive()) {
-      this.stopCombat();
-      return 'Цель уже повержена.';
-    }
-
-    // Сбрасываем флаг использования умения в начале каждого раунда
-    this.player.skillUsedThisRound = false;
-
-    let result = '';
-
-    // --- Ход игрока ---
-    const usedSkillId = this.player.nextAttackIsSkill;
-    const playerDamage = this.calculatePlayerDamage(usedSkillId);
-    this.player.nextAttackIsSkill = null; // Сбрасываем умение после расчета урона
-
-    let attackMessage = 'Вы наносите';
-    if (usedSkillId) {
-      const skillData = this.skillsData.get(usedSkillId);
-      if (skillData) {
-        attackMessage = `Вы используете "${skillData.name}" и наносите`;
-      } else {
-        console.warn(`Player has skill "${usedSkillId}" but it's not found in skillsData.`);
-        attackMessage = `Вы пытаетесь использовать неизвестное умение и наносите`;
-      }
-    }
-    const npcAlive = npc.takeDamage(playerDamage);
-    result += ' \n' + this.colorize(`${attackMessage} ${playerDamage} урона ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.`, 'combat-player-attack');
-    
-    if (npcAlive) {
-      const npcHealthPercent = Math.round((npc.hitPoints / npc.maxHitPoints) * 100);
-      result += '\n' + this.colorize(`У ${this.colorize(npc.name, `npc-name npc-${npc.type}`)} осталось ${npcHealthPercent}% здоровья.`, 'combat-player-hp');
-    }
-
-    if (!npcAlive) {
-      // НПС умер от атаки игрока
-      result += '\n' + this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} повержен!`, 'combat-npc-death');
-      
-      if (npc.experience > 0) {
-        const levelUpMessage = this.player.addExperience(npc.experience);
-        result += '\n' + this.colorize(`Вы получили ${npc.experience} опыта.`, 'combat-exp-gain');
-        if (levelUpMessage) {
-          result += '\n' + this.colorize(levelUpMessage.message, 'combat-exp-gain');
-          const newSkillMessage = this.checkAndAwardSkills();
-          if (newSkillMessage) {
-            result += '\n' + this.colorize(newSkillMessage, 'combat-exp-gain');
-          }
-        }
-      }
-      
-      const drops = npc.getDeathDrops();
-      if (drops.length > 0) {
-        const [npcAreaId, ] = this._parseGlobalId(this.combatTarget);
-        const currentRoom = this.getCurrentRoom();
-        drops.forEach(localItemId => {
-        const globalItemId = this._getGlobalId(localItemId, npcAreaId);
-        currentRoom.addItem(globalItemId);
-        });
-        result += `\n${this.colorize(npc.name, `npc-name npc-${npc.type}`)} что-то оставил.`;
-      }
-      
-      const deadNpcGlobalId = this.combatTarget;
-      const deadNpcRoomId = this.player.currentRoom;
-      this.getCurrentRoom().removeNpc(npc.id); // Удаляем по локальному ID
-      this.npcLocationMap.delete(deadNpcGlobalId);
-      this.scheduleNpcRespawn(deadNpcGlobalId, deadNpcRoomId);
-
-      this.stopCombat();
-      return result;
-    }
-
-    // --- Ход НПС ---
-    // 1. Проверка на бегство
-    if (npc.fleesAtPercent > 0 && (npc.hitPoints / npc.maxHitPoints) <= npc.fleesAtPercent) {
-      const currentRoom = this.getCurrentRoom();
-      const exits = currentRoom.getExits();
-      if (exits.length > 0) {
-        const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
-        const exit = currentRoom.getExit(randomExitDirection);
-        if (typeof exit === 'string') { // Пока что NPC может сбежать только в комнату той же зоны
-          const targetRoomId = this._getGlobalId(exit, currentRoom.area);
-          const targetRoom = this.rooms.get(targetRoomId);
-          currentRoom.removeNpc(npc.id);
-          targetRoom.addNpc(npc.id); // Добавляем локальный ID
-          result += '\n' + this.colorize(`${npc.name} в страхе сбегает!`, 'combat-npc-death');
-          this.stopCombat();
-          return result;
-        }
-      }
-    }
-
-    // 2. Проверка на спецспособности
-    if (npc.specialAbilities && npc.specialAbilities.length > 0) {
-      for (const ability of npc.specialAbilities) {
-        if (Math.random() < ability.chance) {
-          if (ability.name === 'bark') {
-            result += '\n' + this.colorize(ability.message, 'combat-npc-attack');
-            this.stopCombat(true); // Игрок сбегает
-            return result;
-          }
-        }
-      }
-    }
-
-    // 3. Обычная атака НПС
-    const npcDamage = npc.rollDamage();
-    this.player.takeDamage(npcDamage);
-    result += '\n' + this.colorize(`${this.colorize(npc.name, `npc-name npc-${npc.type}`)} наносит вам ${npcDamage} урона.`, 'combat-npc-attack');
-    result += '\n' + this.colorize(`У вас осталось ${this.player.hitPoints}/${this.player.maxHitPoints} HP.`, 'combat-player-hp');
-    
-    if (this.player.hitPoints <= 0) {
-      result += '\n' + this.colorize('Вы умерли!', 'combat-player-death');
-      this.stopCombat();
-    }
-    return result;
+    this.combatManager = new CombatManager(this, this.player, npc);
+    this.combatManager.start();
   }
 
   /**
    * Завершает бой
    * @param {boolean} playerFled - игрок сбежал?
    */
-  stopCombat(playerFled = false) {
-    if (this.combatTimeout) {
-      clearTimeout(this.combatTimeout);
-      this.combatTimeout = null;
-    }
-    if (this.player.state !== 'dead') {
-      this.player.state = 'idle';
-    }
-    this.player.nextAttackIsSkill = null;
-    this.player.skillUsedThisRound = false;
-    this.combatTarget = null;
-  }
-
-  /**
-   * Вычисляет урон игрока
-   * @param {string|null} skillId - ID используемого умения.
-   * @returns {number} урон
-   */
-  calculatePlayerDamage(skillId = null) {
-    let baseDamage;
-    
-    // Урон от оружия или кулаков (1d4)
-    if (this.player.equippedWeapon) {
-      baseDamage = this.player.rollWeaponDamage();
-    } else {
-      baseDamage = Math.floor(Math.random() * 4) + 1;
-    }
-    
-    // Бонус от силы
-    const strBonus = Math.floor((this.player.strength - 10) / 2);
-
-    let finalDamage = baseDamage + strBonus;
-
-    // Применяем модификатор от умения
-    if (skillId) {
-      const skillData = this.skillsData.get(skillId);
-      if (skillData && skillData.damageMultiplier) {
-        finalDamage *= skillData.damageMultiplier;
-      }
-    }
-
-    return Math.max(1, Math.floor(finalDamage));
+  stopCombat() {
+    this.combatManager = null;
   }
 
   /**
@@ -791,10 +613,8 @@ export class GameEngine {
     this.npcLocationMap.clear();
 
     // Очищаем временное состояние игры
-    this.combatTarget = null;
-    if (this.combatTimeout) {
-      clearTimeout(this.combatTimeout);
-      this.combatTimeout = null;
+    if (this.combatManager) {
+      this.combatManager.stop();
     }
     this.respawnQueue = [];
     this.gameState = 'menu';
