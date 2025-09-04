@@ -154,6 +154,17 @@ const currentEnemy = computed(() => {
             </div>
           </div>
 
+          <div class="stat-group">
+            <h4>🏃 Выносливость</h4>
+            <div class="stamina-bar">
+              <div
+                class="stamina-fill"
+                :style="{ width: (player.stamina / player.maxStamina * 100) + '%' }"
+              ></div>
+              <span class="stamina-text">{{ player.stamina }}/{{ player.maxStamina }}</span>
+            </div>
+          </div>
+
           <div v-if="currentEnemy" class="stat-group">
             <h4>💀 Здоровье врага</h4>
             <div class="health-bar enemy-health-bar">
@@ -195,17 +206,29 @@ const currentEnemy = computed(() => {
             <div v-for="skill in learnedSkills" :key="skill.id" class="skill-item" :title="skill.description">
               <div class="skill-name">{{ skill.name }}</div>
               <div class="skill-actions">
-                <button class="action-btn" @click="$emit('command', skill.id)">
+                <button
+                  class="action-btn"
+                  @click="$emit('command', skill.id)"
+                  :disabled="player.stamina < skill.cost || (player.skillCooldowns && player.skillCooldowns[skill.id] > 0)"
+                  :title="player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (player.skillCooldowns && player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${player.skillCooldowns[skill.id]}` : skill.description"
+                >
                   Использовать
+                  <span v-if="player.skillCooldowns && player.skillCooldowns[skill.id] > 0">
+                    ({{ player.skillCooldowns[skill.id] }})
+                  </span>
                 </button>
                 <button
                   v-for="npc in hostileNpcsInRoom"
                   :key="npc.id"
                   class="action-btn"
                   @click="$emit('command', `${skill.id} ${npc.name}`)"
-                  :title="`Применить '${skill.name}' к ${npc.name}`"
+                  :disabled="player.stamina < skill.cost || (player.skillCooldowns && player.skillCooldowns[skill.id] > 0)"
+                  :title="player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (player.skillCooldowns && player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${player.skillCooldowns[skill.id]}` : `Применить '${skill.name}' к ${npc.name}`"
                 >
                   → {{ npc.name }}
+                  <span v-if="player.skillCooldowns && player.skillCooldowns[skill.id] > 0">
+                    ({{ player.skillCooldowns[skill.id] }})
+                  </span>
                 </button>
               </div>
             </div>
@@ -377,6 +400,13 @@ const currentEnemy = computed(() => {
   font-size: 12px;
 }
 
+.stamina-bar {
+  position: relative;
+  height: 16px;
+  background-color: #1a1a00;
+  border: 1px solid #ffff00;
+  margin: 5px 0;
+}
 .stat-line {
   margin: 3px 0;
   font-size: 11px;
@@ -402,6 +432,21 @@ const currentEnemy = computed(() => {
   transition: width 0.3s ease;
 }
 
+.stamina-fill {
+  height: 100%;
+  background-color: #006400; /* DarkGreen */
+  transition: width 0.3s ease;
+}
+
+.stamina-text {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  color: #fff;
+  font-size: 10px;
+  text-shadow: 1px 1px 2px #000;
+}
 .exp-fill {
   height: 100%;
   background-color: #0000ff;

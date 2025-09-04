@@ -222,8 +222,9 @@ export class GameEngine {
    */
   tick() {
     const messages = this.checkRespawns();
+    const cooldownMessages = this._tickCooldowns();
     const wanderMessages = this.updateWanderingNpcs();
-    return [...messages, ...wanderMessages];
+    return [...messages, ...cooldownMessages, ...wanderMessages];
   }
 
   /**
@@ -255,6 +256,29 @@ export class GameEngine {
     });
 
     return messages;
+  }
+
+  /**
+   * Уменьшает время перезарядки умений игрока на 1 каждую секунду.
+   * @private
+   * @returns {string[]} Массив сообщений о готовности умений.
+   */
+  _tickCooldowns() {
+    const messages = [];
+    for (const skillId in this.player.skillCooldowns) {
+      if (this.player.skillCooldowns[skillId] > 0) {
+        this.player.skillCooldowns[skillId]--;
+        if (this.player.skillCooldowns[skillId] === 0) {
+          delete this.player.skillCooldowns[skillId];
+          const skillData = this.skillsData.get(skillId);
+          if (skillData) {
+            // Сообщение отправляется через emit, чтобы появиться в терминале
+            this.emit('message', this.colorize(`Умение "${skillData.name}" готово к использованию.`, 'combat-exp-gain'));
+          }
+        }
+      }
+    }
+    return messages; // Возвращаем пустой массив, т.к. сообщения идут через emit
   }
 
   /**

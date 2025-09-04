@@ -24,6 +24,8 @@ export class Player {
     this.experienceToNext = 100;
     this.hitPoints = 20;
     this.maxHitPoints = 20;
+    this.stamina = 100;
+    this.maxStamina = 100;
     this.strength = 10;
     this.dexterity = 10;
     this.constitution = 10;
@@ -36,6 +38,7 @@ export class Player {
     this.equippedWeapon = null;
     this.equippedArmor = null;
     this.skills = new Set();
+    this.skillCooldowns = {};
     this.nextAttackIsSkill = null;
     this.skillUsedThisRound = false;
     this.deathRoom = null;
@@ -63,11 +66,19 @@ export class Player {
    */
   levelUp() {
     this.level++;
-    this.experience -= this.experienceToNext;
+    // Если опыта для повышения уровня не хватало (например, при вызове через gain lvl),
+    // то просто сбрасываем его в 0, иначе вычитаем стоимость уровня.
+    if (this.experience < this.experienceToNext) {
+      this.experience = 0;
+    } else {
+      this.experience -= this.experienceToNext;
+    }
     this.experienceToNext = this.level * 100; // прогрессия опыта
     
-    // Увеличиваем HP и случайную характеристику
+    // Увеличиваем HP, выносливость и случайную характеристику
     this.maxHitPoints += 5; // Бонус к здоровью за уровень
+    this.maxStamina += 10; // Бонус к выносливости за уровень
+    this.stamina = this.maxStamina; // Полное восстановление выносливости
     this.hitPoints = this.maxHitPoints; // полное исцеление при левелапе
     
     // Случайное улучшение характеристики
@@ -162,9 +173,16 @@ export class Player {
    * @param {object} data - Данные для загрузки.
    */
   load(data) {
+    // Сначала применяем все данные из сохранения
     Object.assign(this, data);
-    // Убедимся, что skills - это Set
+
+    // Затем убеждаемся, что новые или отсутствующие в сохранении поля
+    // имеют значения по умолчанию, чтобы избежать NaN и undefined.
+    this.stamina = data.stamina ?? this.maxStamina ?? 100;
+    this.maxStamina = data.maxStamina ?? 100;
     this.skills = new Set(data.skills || []);
+    this.skillCooldowns = data.skillCooldowns || {};
+    this.nextAttackIsSkill = null; // Сбрасываем, чтобы не зациклилось умение после загрузки
   }
 
   /**
