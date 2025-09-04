@@ -100,6 +100,13 @@ const healingPotion = computed(() => {
   if (!props.player || !props.player.inventory) return null;
   return props.player.inventory.find(item => item.type === 'potion' && item.healAmount);
 });
+
+/** @description Вычисляемое свойство, возвращающее текущего противника в бою. */
+const currentEnemy = computed(() => {
+  // eslint-disable-next-line no-unused-expressions
+  props.updateCounter;
+  return props.gameEngine.combatManager?.npc;
+});
 </script>
 
 <template>
@@ -136,6 +143,20 @@ const healingPotion = computed(() => {
               <span class="health-text">{{ player.hitPoints }}/{{ player.maxHitPoints }}</span>
             </div>
           </div>
+
+          <div v-if="currentEnemy" class="stat-group">
+            <h4>💀 Здоровье врага</h4>
+            <div class="health-bar enemy-health-bar">
+              <div
+                class="health-fill enemy-health-fill"
+                :style="{ width: (currentEnemy.hitPoints / currentEnemy.maxHitPoints * 100) + '%' }"
+              ></div>
+              <span class="health-text">
+                {{ currentEnemy.name }}: {{ currentEnemy.hitPoints }}/{{ currentEnemy.maxHitPoints }}
+              </span>
+            </div>
+          </div>
+
 
           <div class="stat-group">
             <h4>⭐ Прогресс</h4>
@@ -362,6 +383,12 @@ const healingPotion = computed(() => {
 .health-fill {
   height: 100%;
   background-color: #ff0000;
+  transition: width 0.3s ease;
+}
+
+.enemy-health-fill {
+  background-color: #990000; /* Более темный красный для врага */
+  height: 100%;
   transition: width 0.3s ease;
 }
 
