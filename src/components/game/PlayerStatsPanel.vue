@@ -1,6 +1,6 @@
 <script setup>
 // Компонент Vue для отображения панели статистики игрока, инвентаря, экипировки и карты.
-import { ref, computed } from 'vue';
+import { ref, computed, watch } from 'vue';
 import EquipmentPanel from './EquipmentPanel.vue';
 import InventoryPanel from './InventoryPanel.vue';
 import ActionsPanel from './ActionsPanel.vue';
@@ -36,6 +36,16 @@ const props = defineProps({
  * @emits move - Событие для перемещения игрока.
  */
 const emit = defineEmits(['command', 'move']);
+
+/**
+ * Отслеживает изменение состояния игрока.
+ * Если игрок вступает в бой, автоматически открывает вкладку "Статистика".
+ */
+watch(() => props.player.state, (newState) => {
+  if (newState === 'fighting') {
+    activeTab.value = 'stats';
+  }
+});
 
 /** @type {import('vue').Ref<boolean>} Состояние панели (свернута/развернута) */
 const isExpanded = ref(true);
