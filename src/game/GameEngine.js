@@ -864,10 +864,14 @@ ${this.getCurrentRoom().getFullDescription(this)}
 
   /**
    * Генерирует сгруппированный список доступных действий для игрока в текущей комнате.
-   * @returns {Array<Array<{label: string, command: string, danger?: boolean}>>}
+   * @returns {Array<{
+   *   isGeneral?: boolean,
+   *   target?: { name: string, type: string },
+   *   actions: Array<{label: string, command: string, danger?: boolean}>
+   * }>}
    */
   getAvailableActions() {
-    const actionGroups = [];
+    const groupedActions = [];
     const currentRoom = this.getCurrentRoom();
     if (!currentRoom) return [];
 
@@ -877,45 +881,57 @@ ${this.getCurrentRoom().getFullDescription(this)}
       { label: '💾 Сохранить', command: 'save' },
       { label: '❓ Помощь', command: 'help' }
     ];
-    actionGroups.push(baseActions);
+    groupedActions.push({ isGeneral: true, actions: baseActions });
 
-    // --- Группа: Действия с NPC ---
-    const npcActions = [];
+    // --- Действия, которые не привязаны к конкретному NPC, но зависят от их наличия ---
+    const generalNpcActions = [];
     const npcsInRoom = currentRoom.npcs
       .map(npcId => this.getNpc(npcId, currentRoom.area))
       .filter(npc => npc && npc.isAlive());
 
     if (npcsInRoom.some(npc => npc.canTrade && npc.canTrade())) {
-      npcActions.push({ label: '💰 Торговать', command: 'list' });
+      generalNpcActions.push({ label: '💰 Торговать', command: 'list' });
     }
     if (npcsInRoom.some(npc => npc.canHeal)) {
-      npcActions.push({ label: '✨ Исцелиться', command: 'heal' });
+      generalNpcActions.push({ label: '✨ Исцелиться', command: 'heal' });
+    }
+    if (generalNpcActions.length > 0) {
+      groupedActions.push({ isGeneral: true, actions: generalNpcActions });
     }
 
-    for (const npc of npcsInRoom) {
-      npcActions.push({ label: `👁️ Осмотреть ${npc.name}`, command: `look ${npc.name}` });
-      npcActions.push({ label: `🤔 Оценить ${npc.name}`, command: `consider ${npc.name}` });
-      if (npc.dialogue && npc.dialogue.length > 0) {
-        npcActions.push({ label: `💬 Поговорить с ${npc.name}`, command: `talk ${npc.name}` });
-      }
-      if (npc.type === 'hostile') {
-        npcActions.push({ label: `⚔️ Убить ${npc.name}`, command: `kill ${npc.name}`, danger: true });
-      }
-    }
-    if (npcActions.length > 0) actionGroups.push(npcActions);
-
-    // --- Группа: Действия с предметами ---
-    const itemActions = currentRoom.items
+    // --- Группировка действий по каждому предмету ---
+    currentRoom.items
       .map(globalItemId => this.items.get(globalItemId))
       .filter(Boolean)
-      .flatMap(item => ([
-        { label: `👁️ Осмотреть ${item.name}`, command: `look ${item.name}` },
-        { label: `🤔 Оценить ${item.name}`, command: `consider ${item.name}` },
-        { label: `✋ Взять ${item.name}`, command: `get ${item.name}` }
-      ]));
-    if (itemActions.length > 0) actionGroups.push(itemActions);
+      .forEach(item => {
+        groupedActions.push({
+          target: { name: item.name, type: 'item-name' },
+          actions: [
+            { label: `👁️ Осмотреть`, command: `look ${item.name}` },
+            { label: `🤔 Оценить`, command: `consider ${item.name}` },
+            { label: `✋ Взять`, command: `get ${item.name}` }
+          ]
+        });
+      });
 
-    return actionGroups;
+    // --- Группировка действий по каждому NPC ---
+    for (const npc of npcsInRoom) {
+      const specificNpcActions = [];
+      specificNpcActions.push({ label: `👁️ Осмотреть`, command: `look ${npc.name}` });
+      specificNpcActions.push({ label: `🤔 Оценить`, command: `consider ${npc.name}` });
+      if (npc.dialogue && npc.dialogue.length > 0) {
+        specificNpcActions.push({ label: `💬 Поговорить`, command: `talk ${npc.name}` });
+      }
+      if (npc.type === 'hostile') {
+        specificNpcActions.push({ label: `⚔️ Убить`, command: `kill ${npc.name}`, danger: true });
+      }
+      groupedActions.push({
+        target: { name: npc.name, type: `npc-${npc.type}` },
+        actions: specificNpcActions
+      });
+    }
+
+    return groupedActions;
   }
 
   /**

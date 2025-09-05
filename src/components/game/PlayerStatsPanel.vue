@@ -73,7 +73,7 @@ const currentRoom = computed(() => {
 });
 
 /** @description Вычисляемое свойство, возвращающее список доступных действий. */
-const availableActionGroups = computed(() => {
+const groupedActions = computed(() => {
   return props.gameEngine.getAvailableActions ? props.gameEngine.getAvailableActions() : [];
 });
 
@@ -276,7 +276,7 @@ const currentEnemy = computed(() => {
           />
 
           <ActionsPanel
-            :action-groups="availableActionGroups"
+            :grouped-actions="groupedActions"
             @command="$emit('command', $event)"
           />
 
