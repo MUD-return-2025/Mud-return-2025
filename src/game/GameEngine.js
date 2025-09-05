@@ -987,6 +987,21 @@ ${this.getCurrentRoom().getFullDescription(this)}
         suggestFrom(itemsInInventory, 'item');
         break;
 
+      case 'buy':
+      case 'купить': {
+        const trader = this._getTraderInCurrentRoom();
+        if (trader) {
+          const shopItems = trader.getShopItems()
+            .map(localId => this.getItem(localId, trader.area))
+            .filter(Boolean);
+          suggestFrom(shopItems, 'item');
+        }
+        break;
+      }
+      case 'sell':
+      case 'продать':
+        suggestFrom(itemsInInventory, 'item');
+        break;
       case 'kill':
       case 'убить':
       case 'talk':
