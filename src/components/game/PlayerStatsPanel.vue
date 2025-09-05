@@ -10,7 +10,6 @@ import MapPanel from './MapPanel.vue';
  * @property {Object} player - Объект с данными игрока.
  * @property {Boolean} gameStarted - Флаг, указывающий, началась ли игра.
  * @property {Object} gameEngine - Экземпляр игрового движка.
- * @property {Number} updateCounter - Счетчик обновлений для принудительной перерисовки.
  */
 const props = defineProps({
   player: {
@@ -23,10 +22,6 @@ const props = defineProps({
   },
   gameEngine: {
     type: Object,
-    required: true
-  },
-  updateCounter: {
-    type: Number,
     required: true
   }
 });
@@ -79,8 +74,6 @@ const currentRoom = computed(() => {
 
 /** @description Вычисляемое свойство, возвращающее список доступных действий. */
 const availableActionGroups = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter;
   return props.gameEngine.getAvailableActions ? props.gameEngine.getAvailableActions() : [];
 });
 
@@ -97,8 +90,6 @@ const learnedSkills = computed(() => {
 
 /** @description Вычисляемое свойство, возвращающее список враждебных NPC в комнате. */
 const hostileNpcsInRoom = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter;
   if (!currentRoom.value) return [];
   return currentRoom.value.npcs
     .map(npcId => props.gameEngine.getNpc(npcId, currentRoom.value.area))
@@ -113,8 +104,6 @@ const healingPotion = computed(() => {
 
 /** @description Вычисляемое свойство, возвращающее текущего противника в бою. */
 const currentEnemy = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter;
   return props.gameEngine.combatManager?.npc;
 });
 </script>
@@ -207,7 +196,7 @@ const currentEnemy = computed(() => {
               <div class="skill-name">{{ skill.name }}</div>
               <div class="skill-actions">
                 <button
-                  class="action-btn"
+                  :class="['action-btn', { 'is-on-cooldown': player.skillCooldowns && player.skillCooldowns[skill.id] > 0 }]"
                   @click="$emit('command', skill.id)"
                   :disabled="player.stamina < skill.cost || (player.skillCooldowns && player.skillCooldowns[skill.id] > 0)"
                   :title="player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (player.skillCooldowns && player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${player.skillCooldowns[skill.id]}` : skill.description"
@@ -220,7 +209,7 @@ const currentEnemy = computed(() => {
                 <button
                   v-for="npc in hostileNpcsInRoom"
                   :key="npc.id"
-                  class="action-btn"
+                  :class="['action-btn', { 'is-on-cooldown': player.skillCooldowns && player.skillCooldowns[skill.id] > 0 }]"
                   @click="$emit('command', `${skill.id} ${npc.name}`)"
                   :disabled="player.stamina < skill.cost || (player.skillCooldowns && player.skillCooldowns[skill.id] > 0)"
                   :title="player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (player.skillCooldowns && player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${player.skillCooldowns[skill.id]}` : `Применить '${skill.name}' к ${npc.name}`"
@@ -263,7 +252,6 @@ const currentEnemy = computed(() => {
           <InventoryPanel
             :player="player"
             :game-engine="gameEngine"
-            :update-counter="updateCounter"
             @command="$emit('command', $event)"
           />
         </div>
@@ -282,7 +270,6 @@ const currentEnemy = computed(() => {
             :game-engine="gameEngine"
             :player="player"
             :game-started="gameStarted"
-            :update-counter="updateCounter"
             :current-room="currentRoom"
             @command="$emit('command', $event)"
             @move="$emit('move', $event)"

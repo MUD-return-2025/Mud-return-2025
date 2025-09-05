@@ -5,7 +5,6 @@ const props = defineProps({
   gameEngine: { type: Object, required: true },
   player: { type: Object, required: true },
   gameStarted: { type: Boolean, default: false },
-  updateCounter: { type: Number, required: true },
   currentRoom: { type: Object, default: null }
 });
 
@@ -16,8 +15,6 @@ const emit = defineEmits(['command', 'move']);
  * Возвращают массив `[areaId, localRoomId]`.
  */
 const currentRoomIds = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter; // Принудительная реактивность
   if (!props.gameStarted || !props.player.currentRoom) return [null, null];
   return props.gameEngine._parseGlobalId(props.player.currentRoom);
 });
@@ -135,6 +132,7 @@ const moveToRoom = async (localRoomId) => {
         }" 
         :style="{ 'grid-column': room.map.x + 1, 'grid-row': room.map.y + 1 }"
         @click="moveToRoom(room.id)"
+        :title="isRoomClickable(room.id) ? `Перейти в: ${room.name}` : room.name"
       >
         <div class="room-name">{{ room.name }}</div>
       </div>

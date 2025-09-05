@@ -37,7 +37,7 @@ export class Player {
     this.state = 'idle';
     this.equippedWeapon = null;
     this.equippedArmor = null;
-    this.skills = new Set();
+    this.skills = []; // Используем массив вместо Set
     this.skillCooldowns = {};
     this.nextAttackIsSkill = null;
     this.skillUsedThisRound = false;
@@ -144,7 +144,7 @@ export class Player {
    * @returns {boolean}
    */
   hasSkill(skillId) {
-    return this.skills.has(skillId);
+    return this.skills.includes(skillId);
   }
 
   /**
@@ -180,7 +180,7 @@ export class Player {
     // имеют значения по умолчанию, чтобы избежать NaN и undefined.
     this.stamina = data.stamina ?? this.maxStamina ?? 100;
     this.maxStamina = data.maxStamina ?? 100;
-    this.skills = new Set(data.skills || []);
+    this.skills = Array.isArray(data.skills) ? data.skills : []; // Убедимся, что это массив
     this.skillCooldowns = data.skillCooldowns || {};
     this.nextAttackIsSkill = null; // Сбрасываем, чтобы не зациклилось умение после загрузки
   }

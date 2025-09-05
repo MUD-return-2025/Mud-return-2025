@@ -13,27 +13,39 @@
       </div>
     </div>
 
-    <div class="terminal-input">
-      <span class="prompt">></span>
-      <input
-        v-model="currentInput"
-        @keyup.enter="processCommand"
-        @keydown.up.prevent="navigateHistoryUp"
-        @keydown.down.prevent="navigateHistoryDown"
-        ref="inputElement"
-        placeholder="Введите команду..."
-        autocomplete="off"
+    <div class="input-container">
+      <div v-if="suggestions.length > 0" class="suggestions-box">
+        <div
+          v-for="(suggestion, index) in suggestions"
+          :key="index"
+          :class="['suggestion-item', { active: activeSuggestionIndex === index }]"
+          @click="applySuggestion(suggestion)"
+        >
+          <span :class="`suggestion-type-${suggestion.type}`">{{ suggestion.type.charAt(0).toUpperCase() }}</span> {{ suggestion.text }}
+        </div>
+      </div>
+      <div class="terminal-input">
+        <span class="prompt">></span>
+        <input
+          v-model="currentInput"
+          @keyup.enter="processCommand"
+          @keydown.up.prevent="navigateSuggestionsUp"
+          @keydown.down.prevent="navigateSuggestionsDown"
+          @keydown.tab.prevent="applyActiveSuggestion"
+          ref="inputElement"
+          placeholder="Введите команду..."
+          autocomplete="off"
+        />
+      </div>
+
+      <PlayerStatsPanel
+        :player="player"
+        :game-started="gameStarted"
+        :game-engine="gameEngine"
+        @command="executeCommand"
+        @move="handleMove"
       />
     </div>
-
-    <PlayerStatsPanel
-      :player="gameEngine.player"
-      :game-started="gameStarted"
-      :game-engine="gameEngine"
-      :update-counter="updateCounter"
-      @command="executeCommand"
-      @move="handleMove"
-    />
   </div>
 </template>
 
@@ -58,14 +70,20 @@ const commandHistory = ref([]);
 const historyIndex = ref(0);
 /** @type {string} Временное хранилище для текста в поле ввода при навигации по истории. */
 let tempInputOnNavStart = '';
-/** @type {import('vue').Ref<number>} Счетчик для принудительного обновления дочерних компонентов. */
-const updateCounter = ref(0);
+/** @type {import('vue').Ref<object>} Реактивная обертка для данных игрока. */
+const player = reactive(gameEngine.player);
+/** @type {import('vue').Ref<object|null>} Реактивная ссылка на текущего противника. */
+const currentEnemy = ref(null);
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент вывода терминала. */
 const outputElement = ref(null);
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент поля ввода. */
 const inputElement = ref(null);
 /** @type {import('vue').Ref<boolean>} Флаг полноэкранного режима. */
 const isFullscreen = ref(false);
+/** @type {import('vue').Ref<Array<{text: string, type: string}>>} Массив подсказок для автодополнения. */
+const suggestions = ref([]);
+/** @type {import('vue').Ref<number>} Индекс активной подсказки. */
+const activeSuggestionIndex = ref(-1);
 
 /**
  * Переключает полноэкранный режим терминала.
@@ -77,31 +95,43 @@ const toggleFullscreen = () => {
 };
 
 /**
- * Перемещается вверх по истории команд при нажатии стрелки вверх.
+ * Осуществляет навигацию по списку подсказок или истории команд.
  */
-const navigateHistoryUp = (e) => {
-  if (commandHistory.value.length === 0) return;
-  // Сохраняем текущий ввод, если мы начинаем навигацию с конца истории
-  if (historyIndex.value === commandHistory.value.length) {
-    tempInputOnNavStart = currentInput.value;
+const navigateSuggestionsUp = () => {
+  if (suggestions.value.length > 0) {
+    // Корректная навигация вверх по подсказкам
+    activeSuggestionIndex.value = activeSuggestionIndex.value <= 0
+      ? suggestions.value.length - 1
+      : activeSuggestionIndex.value - 1;
+  } else {
+    navigateHistory('up');
   }
+};
 
-  if (historyIndex.value > 0) {
-    historyIndex.value--;
-    currentInput.value = commandHistory.value[historyIndex.value];
+const navigateSuggestionsDown = () => {
+  if (suggestions.value.length > 0) {
+    // Корректная навигация вниз по подсказкам
+    activeSuggestionIndex.value = (activeSuggestionIndex.value + 1) % suggestions.value.length;
+  } else {
+    navigateHistory('down');
   }
 };
 
 /**
- * Перемещается вниз по истории команд при нажатии стрелки вниз.
+ * Перемещается по истории команд.
+ * @param {'up' | 'down'} direction
  */
-const navigateHistoryDown = (e) => {
+const navigateHistory = (direction) => {
   if (commandHistory.value.length === 0) return;
-
-  if (historyIndex.value < commandHistory.value.length) {
-    historyIndex.value++;
-    currentInput.value = commandHistory.value[historyIndex.value] ?? tempInputOnNavStart;
+  if (direction === 'up') {
+    if (historyIndex.value === commandHistory.value.length) {
+      tempInputOnNavStart = currentInput.value;
+    }
+    if (historyIndex.value > 0) historyIndex.value--;
+  } else {
+    if (historyIndex.value < commandHistory.value.length) historyIndex.value++;
   }
+  currentInput.value = commandHistory.value[historyIndex.value] ?? tempInputOnNavStart;
 };
 
 /**
@@ -119,6 +149,45 @@ const scrollToBottom = () => {
 // Отслеживаем изменения в `gameMessages` для автопрокрутки.
 watch(gameMessages, scrollToBottom, { deep: true });
 
+// Отслеживаем изменения в поле ввода для генерации подсказок.
+watch(currentInput, (newInput) => {
+  if (!gameStarted.value || !newInput.trim()) {
+    suggestions.value = [];
+    return;
+  }
+
+  const parts = newInput.split(' ');
+  const command = parts[0].toLowerCase();
+  const prefix = parts.length > 1 ? parts.slice(1).join(' ') : '';
+
+  // Если вводится только первая команда, предлагаем сами команды
+  if (parts.length === 1) {
+    suggestions.value = gameEngine.getCommandSuggestions(null, command);
+  } else {
+    suggestions.value = gameEngine.getCommandSuggestions(command, prefix);
+  }
+  activeSuggestionIndex.value = -1; // Сбрасываем выбор
+});
+
+/** Применяет выбранную подсказку к полю ввода. */
+const applySuggestion = (suggestion) => {
+  const parts = currentInput.value.split(' ');
+  parts[parts.length - 1] = suggestion.text;
+  currentInput.value = parts.join(' ');
+  suggestions.value = []; // Скрываем подсказки
+  inputElement.value?.focus(); // Возвращаем фокус
+};
+
+/** Применяет активную (или первую) подсказку по нажатию Tab. */
+const applyActiveSuggestion = () => {
+  if (suggestions.value.length === 0) return;
+  // Если подсказка выбрана стрелками, используем ее. Иначе — первую в списке.
+  const suggestionToApply = activeSuggestionIndex.value !== -1
+    ? suggestions.value[activeSuggestionIndex.value]
+    : suggestions.value[0];
+  applySuggestion(suggestionToApply);
+};
+
 /**
  * Выполняет команду, отправленную из дочернего компонента (например, PlayerStatsPanel).
  * @param {string} command - Команда для выполнения.
@@ -130,12 +199,12 @@ const executeCommand = async (command) => {
   if (command) gameMessages.value.push(`> ${command}`);
   const result = await gameEngine.processCommand(command);
   if (result) gameMessages.value.push(...result.split('\n'));
-
+  
   // Автосохранение каждые несколько команд для удобства.
-  updateCounter.value++;
   if (gameMessages.value.length % 10 === 0) {
     gameEngine.saveGame();
   }
+  updateReactiveState();
 };
 
 /**
@@ -146,19 +215,23 @@ const handleMove = (message) => {
   if (!gameStarted.value) return;
   
   gameMessages.value.push(message);
-  
   // Автосохранение после каждого перемещения.
-  updateCounter.value++;
   gameEngine.saveGame();
+  updateReactiveState();
 };
 
 /**
- * Обрабатывает ввод команды в терминале.
- * Это основная функция взаимодействия игрока с игрой.
+ * Обрабатывает ввод и выполнение команды.
+ * Если выбрана подсказка, сначала применяет ее.
  */
 const processCommand = async () => {
+  if (suggestions.value.length > 0 && activeSuggestionIndex.value !== -1) {
+    applySuggestion(suggestions.value[activeSuggestionIndex.value]);
+  }
   const input = currentInput.value.trim();
   if (!input) return;
+
+  suggestions.value = []; // Скрываем подсказки после отправки
 
   // Добавляем команду в историю, если она не дублирует последнюю.
   if (commandHistory.value.length === 0 || commandHistory.value[commandHistory.value.length - 1] !== input) {
@@ -174,12 +247,14 @@ const processCommand = async () => {
       const playerName = args.length > 0 ? args.join(' ') : undefined;
       const welcomeMsg = await gameEngine.startNewGame(playerName);
       gameMessages.value = welcomeMsg.split('\n');
+      Object.assign(player, gameEngine.player); // Синхронизируем реактивный объект
       gameStarted.value = true;
     } else if (command.toLowerCase() === 'load') {
       const loaded = await gameEngine.loadGame();
       if (loaded) {
         gameMessages.value.push('Игра загружена!');
         const currentRoom = gameEngine.getCurrentRoom();
+        Object.assign(player, gameEngine.player); // Синхронизируем реактивный объект
         gameMessages.value.push('', currentRoom.getFullDescription(gameEngine));
         gameStarted.value = true;
       } else {
@@ -196,6 +271,12 @@ const processCommand = async () => {
   currentInput.value = '';
 };
 
+/** Обновляет реактивные переменные, которые передаются в дочерние компоненты */
+const updateReactiveState = () => {
+  // Object.assign для обновления полей реактивного объекта player
+  Object.assign(player, gameEngine.player);
+};
+
 onMounted(() => {
   // Фокусируемся на поле ввода при загрузке компонента.
   inputElement.value?.focus();
@@ -204,8 +285,8 @@ onMounted(() => {
   // Подписываемся на асинхронные сообщения от движка (например, раунды боя).
   gameEngine.on('message', (message) => {
     if (message) {
-      updateCounter.value++;
       gameMessages.value.push(...message.split('\n'));
+      updateReactiveState();
     }
   });
 
@@ -216,13 +297,13 @@ onMounted(() => {
       // 1. Обрабатываем события, происходящие с течением времени (игровой тик).
       const tickMessages = gameEngine.tick();
       if (tickMessages.length > 0) {
-        updateCounter.value++;
         gameMessages.value.push(...tickMessages);
       }
 
       // 2. Автосохранение каждые 30 секунд.
       tickCount++;
       if (tickCount >= 30) {
+        // console.log('Autosaving...');
         gameEngine.saveGame();
         tickCount = 0;
       }
@@ -252,6 +333,10 @@ onMounted(() => {
   border: none;
 }
 
+.input-container {
+  position: relative;
+}
+
 .game-terminal.fullscreen .terminal-output {
   height: calc(100% - 42px); /* Full height minus input bar */
 }
@@ -265,6 +350,58 @@ onMounted(() => {
   font-size: 14px;
   line-height: 1.4;
   position: relative;
+}
+
+.suggestions-box {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background-color: #002a00;
+  border: 1px solid #00ff00;
+  border-bottom: none;
+  max-height: 150px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.suggestion-item {
+  padding: 4px 10px;
+  color: #00ff00;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid #004400;
+}
+
+.suggestion-item:last-child {
+  border-bottom: none;
+}
+
+.suggestion-item:hover, .suggestion-item.active {
+  background-color: #00ff00;
+  color: #000;
+}
+
+.suggestion-item .suggestion-type-command { color: #ffff00; }
+.suggestion-item .suggestion-type-item { color: #ff00ff; }
+.suggestion-item .suggestion-type-npc { color: #ff4444; }
+.suggestion-item .suggestion-type-exit { color: #00ffff; }
+
+.suggestion-item:hover .suggestion-type-command,
+.suggestion-item.active .suggestion-type-command,
+.suggestion-item:hover .suggestion-type-item,
+.suggestion-item.active .suggestion-type-item,
+.suggestion-item:hover .suggestion-type-npc,
+.suggestion-item.active .suggestion-type-npc,
+.suggestion-item:hover .suggestion-type-exit,
+.suggestion-item.active .suggestion-type-exit {
+  color: #000;
+}
+
+.suggestion-item span {
+  display: inline-block;
+  width: 1.5em;
+  font-weight: bold;
 }
 
 .fullscreen-btn {

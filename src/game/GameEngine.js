@@ -414,7 +414,7 @@ export class GameEngine {
     let message = '';
     for (const [skillId, skillData] of this.skillsData.entries()) {
       if (this.player.level >= skillData.level && !this.player.hasSkill(skillId)) {
-        this.player.skills.add(skillId);
+        this.player.skills.push(skillId); // Используем push вместо add
         message += `\nВы изучили новое умение: ${this.colorize(skillData.name, 'combat-exp-gain')}!`;
       }
     }
@@ -916,5 +916,81 @@ ${this.getCurrentRoom().getFullDescription(this)}
     if (itemActions.length > 0) actionGroups.push(itemActions);
 
     return actionGroups;
+  }
+
+  /**
+   * Генерирует список подсказок для автодополнения команды.
+   * @param {string} command - Введенная команда (e.g., 'get', 'kill').
+   * @param {string} prefix - Частичный аргумент команды для фильтрации (e.g., 'меч').
+   * @returns {Array<{text: string, type: 'command'|'item'|'npc'|'exit'}>} Массив объектов подсказок.
+   */
+  getCommandSuggestions(command, prefix = '') {
+    const suggestions = [];
+    const lowerPrefix = prefix.toLowerCase();
+    const currentRoom = this.getCurrentRoom();
+
+    if (!command) {
+      // Если команда не введена, предлагаем базовые команды
+      const allCommands = [...this.commandParser.commands.keys()];
+      return allCommands
+        .filter(cmd => cmd.startsWith(lowerPrefix))
+        .map(cmd => ({ text: cmd, type: 'command' }));
+    }
+
+    const suggestFrom = (items, type) => {
+      if (!items) return;
+      items
+        .filter(item => item && item.name.toLowerCase().startsWith(lowerPrefix))
+        .forEach(item => suggestions.push({ text: item.name, type }));
+    };
+
+    const itemsInRoom = currentRoom?.items.map(id => this.items.get(id)).filter(Boolean) || [];
+    const npcsInRoom = currentRoom?.npcs.map(id => this.getNpc(id, currentRoom.area)).filter(npc => npc && npc.isAlive()) || [];
+    const itemsInInventory = this.player.inventory;
+
+    switch (command) {
+      case 'go':
+      case 'идти':
+        return currentRoom.getExits()
+          .filter(exit => exit.startsWith(lowerPrefix))
+          .map(exit => ({ text: exit, type: 'exit' }));
+
+      case 'get':
+      case 'взять':
+        suggestFrom(itemsInRoom, 'item');
+        break;
+
+      case 'drop':
+      case 'выбросить':
+      case 'equip':
+      case 'надеть':
+      case 'unequip':
+      case 'снять':
+      case 'use':
+      case 'использовать':
+        suggestFrom(itemsInInventory, 'item');
+        break;
+
+      case 'kill':
+      case 'убить':
+      case 'talk':
+      case 'kick':
+      case 'пнуть':
+      case 'поговорить':
+        suggestFrom(npcsInRoom, 'npc');
+        break;
+
+      case 'look':
+      case 'осмотреть':
+      case 'consider':
+      case 'оценить':
+        suggestFrom(itemsInRoom, 'item');
+        suggestFrom(npcsInRoom, 'npc');
+        suggestFrom(itemsInInventory, 'item');
+        break;
+    }
+
+    // Убираем дубликаты, если они есть
+    return [...new Map(suggestions.map(item => [item.text, item])).values()];
   }
 }

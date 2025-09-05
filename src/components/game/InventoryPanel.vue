@@ -9,10 +9,6 @@ const props = defineProps({
   gameEngine: {
     type: Object,
     required: true
-  },
-  updateCounter: {
-    type: Number,
-    required: true
   }
 });
 
@@ -48,8 +44,6 @@ const currentRoom = computed(() => {
 });
 
 const hasTrader = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter;
   const room = currentRoom.value;
   if (!room) return false;
   return room.npcs.some(npcId => {
@@ -59,8 +53,6 @@ const hasTrader = computed(() => {
 });
 
 const traderInRoom = computed(() => {
-  // eslint-disable-next-line no-unused-expressions
-  props.updateCounter;
   const room = currentRoom.value;
   if (!room) return null;
   const traderId = room.npcs.find(npcId => {
@@ -204,4 +196,3 @@ const traderItems = computed(() => {
 .inventory-list::-webkit-scrollbar-track, .trader-item-list::-webkit-scrollbar-track { background: #001100; }
 .inventory-list::-webkit-scrollbar-thumb, .trader-item-list::-webkit-scrollbar-thumb { background: #00ff00; border-radius: 3px; }
 </style>
-
