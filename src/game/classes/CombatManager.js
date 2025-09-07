@@ -24,7 +24,7 @@ export class CombatManager {
   start() {
     this.player.state = 'fighting';
     const initialAttackMessage = `Вы атакуете ${this.game.colorize(this.npc.name, `npc-name npc-${this.npc.type}`)}!`;
-    this.game.emit('message', initialAttackMessage);
+    if (this.game.onMessage) this.game.onMessage(initialAttackMessage);
     this._loop();
   }
 
@@ -59,7 +59,7 @@ export class CombatManager {
     if (this.isOver) return;
 
     const roundResult = await this.performCombatRound();
-    this.game.emit('message', roundResult);
+    if (this.game.onMessage) this.game.onMessage(roundResult);
 
     if (!this.isOver) {
       this.combatTimeout = setTimeout(() => this._loop(), 2500);

@@ -4,12 +4,12 @@
       <button @click="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'">
         {{ isFullscreen ? '⤡' : '⛶' }}
       </button>
-      <div class="welcome-message">
+      <div v-if="!gameStore.gameStarted" class="welcome-message">
         <p>🏰 Добро пожаловать в Мидгард! 🏰</p>
         <p>Введите "new" для начала новой игры или "load" для загрузки сохранения.</p>
       </div>
 
-      <div v-for="(message, index) in gameMessages" :key="index" class="message" v-html="message">
+      <div v-for="(message, index) in gameStore.messages" :key="index" class="message" v-html="message">
       </div>
     </div>
 
@@ -34,46 +34,29 @@
           @keydown.tab.prevent="applyActiveSuggestion"
           ref="inputElement"
           placeholder="Введите команду..."
+          :disabled="!isInitialized"
           autocomplete="off"
         />
       </div>
 
-      <PlayerStatsPanel
-        :player="player"
-        :game-started="gameStarted"
-        :game-engine="gameEngine"
-        @command="executeCommand"
-        @move="handleMove"
-      />
+      <PlayerStatsPanel />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, reactive, onMounted, nextTick, watch, computed } from 'vue';
-import { GameEngine } from '../../game/GameEngine.js';
+import { ref, onMounted, nextTick, watch } from 'vue';
+import { useGameStore } from '../../stores/game.js';
 import PlayerStatsPanel from './PlayerStatsPanel.vue';
 
-// --- Состояние компонента ---
-
-/** @type {GameEngine} Экземпляр игрового движка. */
-const gameEngine = reactive(new GameEngine());
-/** @type {import('vue').Ref<string[]>} Массив сообщений для вывода в терминал. */
-const gameMessages = ref([]);
 /** @type {import('vue').Ref<string>} Текущий текст в поле ввода. */
 const currentInput = ref('');
-/** @type {import('vue').Ref<boolean>} Флаг, указывающий, началась ли игра. */
-const gameStarted = ref(false);
 /** @type {import('vue').Ref<string[]>} История введенных команд. */
 const commandHistory = ref([]);
 /** @type {import('vue').Ref<number>} Текущий индекс в истории команд для навигации. */
 const historyIndex = ref(0);
 /** @type {string} Временное хранилище для текста в поле ввода при навигации по истории. */
 let tempInputOnNavStart = '';
-/** @type {import('vue').Ref<object>} Реактивная обертка для данных игрока. */
-const player = reactive(gameEngine.player);
-/** @type {import('vue').Ref<object|null>} Реактивная ссылка на текущего противника. */
-const currentEnemy = ref(null);
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент вывода терминала. */
 const outputElement = ref(null);
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент поля ввода. */
@@ -82,8 +65,12 @@ const inputElement = ref(null);
 const isFullscreen = ref(false);
 /** @type {import('vue').Ref<Array<{text: string, type: string}>>} Массив подсказок для автодополнения. */
 const suggestions = ref([]);
+/** @type {import('vue').Ref<boolean>} Флаг, что движок и хранилище инициализированы. */
+const isInitialized = ref(false);
 /** @type {import('vue').Ref<number>} Индекс активной подсказки. */
 const activeSuggestionIndex = ref(-1);
+
+const gameStore = useGameStore();
 
 /**
  * Переключает полноэкранный режим терминала.
@@ -147,11 +134,11 @@ const scrollToBottom = () => {
 };
 
 // Отслеживаем изменения в `gameMessages` для автопрокрутки.
-watch(gameMessages, scrollToBottom, { deep: true });
+watch(() => gameStore.messages, scrollToBottom, { deep: true });
 
 // Отслеживаем изменения в поле ввода для генерации подсказок.
 watch(currentInput, (newInput) => {
-  if (!gameStarted.value || !newInput.trim()) {
+  if (!gameStore.gameStarted || !newInput.trim()) {
     suggestions.value = [];
     return;
   }
@@ -162,9 +149,9 @@ watch(currentInput, (newInput) => {
 
   // Если вводится только первая команда, предлагаем сами команды
   if (parts.length === 1) {
-    suggestions.value = gameEngine.getCommandSuggestions(null, command);
+    suggestions.value = gameStore.engine.getCommandSuggestions(null, command);
   } else {
-    suggestions.value = gameEngine.getCommandSuggestions(command, prefix);
+    suggestions.value = gameStore.engine.getCommandSuggestions(command, prefix);
   }
   activeSuggestionIndex.value = -1; // Сбрасываем выбор
 });
@@ -189,38 +176,6 @@ const applyActiveSuggestion = () => {
 };
 
 /**
- * Выполняет команду, отправленную из дочернего компонента (например, PlayerStatsPanel).
- * @param {string} command - Команда для выполнения.
- */
-const executeCommand = async (command) => {
-  if (!gameStarted.value) return;
-  
-  gameMessages.value.push(` `);
-  if (command) gameMessages.value.push(`> ${command}`);
-  const result = await gameEngine.processCommand(command);
-  if (result) gameMessages.value.push(...result.split('\n'));
-  
-  // Автосохранение каждые несколько команд для удобства.
-  if (gameMessages.value.length % 10 === 0) {
-    gameEngine.saveGame();
-  }
-  updateReactiveState();
-};
-
-/**
- * Обрабатывает событие перемещения игрока, инициированное из PlayerStatsPanel.
- * @param {string} message - Сообщение о результате перемещения.
- */
-const handleMove = (message) => {
-  if (!gameStarted.value) return;
-  
-  gameMessages.value.push(message);
-  // Автосохранение после каждого перемещения.
-  gameEngine.saveGame();
-  updateReactiveState();
-};
-
-/**
  * Обрабатывает ввод и выполнение команды.
  * Если выбрана подсказка, сначала применяет ее.
  */
@@ -240,75 +195,21 @@ const processCommand = async () => {
   // Сбрасываем индекс истории, чтобы при следующем нажатии "вверх" показалась последняя команда.
   historyIndex.value = commandHistory.value.length;
 
-  if (!gameStarted.value) {
-    const [command, ...args] = input.split(/\s+/);
-    // Обработка команд до начала игры (new/load)
-    if (command.toLowerCase() === 'new') {
-      const playerName = args.length > 0 ? args.join(' ') : undefined;
-      const welcomeMsg = await gameEngine.startNewGame(playerName);
-      gameMessages.value = welcomeMsg.split('\n');
-      Object.assign(player, gameEngine.player); // Синхронизируем реактивный объект
-      gameStarted.value = true;
-    } else if (command.toLowerCase() === 'load') {
-      const loaded = await gameEngine.loadGame();
-      if (loaded) {
-        gameMessages.value.push('Игра загружена!');
-        const currentRoom = gameEngine.getCurrentRoom();
-        Object.assign(player, gameEngine.player); // Синхронизируем реактивный объект
-        gameMessages.value.push('', currentRoom.getFullDescription(gameEngine));
-        gameStarted.value = true;
-      } else {
-        gameMessages.value.push('Сохранение не найдено. Используйте "new" для новой игры.');
-      }
-    } else {
-      gameMessages.value.push('Используйте "new" для новой игры или "load" для загрузки.');
-    }
-  } else {
-    // Обработка игровых команд
-    await executeCommand(input);
-  }
+  await gameStore.processCommand(input);
 
   currentInput.value = '';
 };
 
-/** Обновляет реактивные переменные, которые передаются в дочерние компоненты */
-const updateReactiveState = () => {
-  // Object.assign для обновления полей реактивного объекта player
-  Object.assign(player, gameEngine.player);
-};
-
-onMounted(() => {
+onMounted(async () => {
   // Фокусируемся на поле ввода при загрузке компонента.
   inputElement.value?.focus();
   historyIndex.value = commandHistory.value.length;
 
-  // Подписываемся на асинхронные сообщения от движка (например, раунды боя).
-  gameEngine.on('message', (message) => {
-    if (message) {
-      gameMessages.value.push(...message.split('\n'));
-      updateReactiveState();
-    }
-  });
-
-  let tickCount = 0;
-  // Основной игровой цикл (тикер), запускается каждую секунду.
-  setInterval(() => {
-    if (gameStarted.value) {
-      // 1. Обрабатываем события, происходящие с течением времени (игровой тик).
-      const tickMessages = gameEngine.tick();
-      if (tickMessages.length > 0) {
-        gameMessages.value.push(...tickMessages);
-      }
-
-      // 2. Автосохранение каждые 30 секунд.
-      tickCount++;
-      if (tickCount >= 30) {
-        // console.log('Autosaving...');
-        gameEngine.saveGame();
-        tickCount = 0;
-      }
-    }
-  }, 1000);
+  // Инициализируем хранилище и движок
+  if (!isInitialized.value) {
+    await gameStore.initialize();
+    isInitialized.value = true;
+  }
 });
 </script>
 

@@ -1,42 +1,19 @@
 <script setup>
 // Компонент Vue для отображения панели статистики игрока, инвентаря, экипировки и карты.
-import { ref, computed, watch } from 'vue';
+import { ref, watch } from 'vue';
+import { useGameStore } from '../../stores/game.js';
 import EquipmentPanel from './EquipmentPanel.vue';
 import InventoryPanel from './InventoryPanel.vue';
 import ActionsPanel from './ActionsPanel.vue';
 import MapPanel from './MapPanel.vue';
 
-/**
- * @property {Object} player - Объект с данными игрока.
- * @property {Boolean} gameStarted - Флаг, указывающий, началась ли игра.
- * @property {Object} gameEngine - Экземпляр игрового движка.
- */
-const props = defineProps({
-  player: {
-    type: Object,
-    required: true
-  },
-  gameStarted: {
-    type: Boolean,
-    default: false
-  },
-  gameEngine: {
-    type: Object,
-    required: true
-  }
-});
-
-/**
- * @emits command - Событие для отправки команды в игровой движок.
- * @emits move - Событие для перемещения игрока.
- */
-const emit = defineEmits(['command', 'move']);
+const gameStore = useGameStore();
 
 /**
  * Отслеживает изменение состояния игрока.
  * Если игрок вступает в бой, автоматически открывает вкладку "Статистика".
  */
-watch(() => props.player.state, (newState) => {
+watch(() => gameStore.player.state, (newState) => {
   if (newState === 'fighting') {
     activeTab.value = 'stats';
   }
@@ -62,56 +39,12 @@ const togglePanel = () => {
   isExpanded.value = !isExpanded.value;
 };
 
-/**
- * @description Вычисляемое свойство для получения текущей комнаты игрока.
- * Реагирует на изменение `props.player.currentRoom`.
- * @type {import('vue').ComputedRef<import('../../game/classes/Room').Room | null>}
- */
-const currentRoom = computed(() => {
-  if (!props.gameStarted || !props.player.currentRoom) return null;
-  return props.gameEngine.world.rooms.get(props.player.currentRoom);
-});
-
-/** @description Вычисляемое свойство, возвращающее список доступных действий. */
-const groupedActions = computed(() => {
-  return props.gameEngine.getAvailableActions ? props.gameEngine.getAvailableActions() : [];
-});
-
-/** @description Вычисляемое свойство, возвращающее список изученных умений. */
-const learnedSkills = computed(() => {
-  if (!props.gameEngine.skillsData.size) return [];
-  return Array.from(props.player.skills)
-    .map(skillId => {
-      const skill = props.gameEngine.skillsData.get(skillId);
-      return skill ? { ...skill, id: skillId } : null;
-    })
-    .filter(Boolean);
-});
-
-/** @description Вычисляемое свойство, возвращающее список враждебных NPC в комнате. */
-const hostileNpcsInRoom = computed(() => {
-  if (!currentRoom.value) return [];
-  return currentRoom.value.npcs
-    .map(npcId => props.gameEngine.getNpc(npcId, currentRoom.value.area))
-    .filter(npc => npc && npc.isAlive() && npc.type === 'hostile');
-});
-
-/** @description Вычисляемое свойство, находящее первое зелье лечения в инвентаре. */
-const healingPotion = computed(() => {
-  if (!props.player || !props.player.inventory) return null;
-  return props.player.inventory.find(item => item.type === 'potion' && item.healAmount);
-});
-
-/** @description Вычисляемое свойство, возвращающее текущего противника в бою. */
-const currentEnemy = computed(() => {
-  return props.gameEngine.combatManager?.npc;
-});
 </script>
 
 <template>
-  <div class="stats-panel" v-if="gameStarted">
+  <div class="stats-panel" v-if="gameStore.gameStarted">
     <div class="panel-header">
-      <h3>📊 {{ player.name }}</h3>
+      <h3>📊 {{ gameStore.player.name }}</h3>
       <button @click="togglePanel" class="toggle-btn">
         {{ isExpanded ? '−' : '+' }}
       </button>
@@ -137,9 +70,9 @@ const currentEnemy = computed(() => {
             <div class="health-bar">
               <div 
                 class="health-fill" 
-                :style="{ width: (player.hitPoints / player.maxHitPoints * 100) + '%' }"
+                :style="{ width: (gameStore.player.hitPoints / gameStore.player.maxHitPoints * 100) + '%' }"
               ></div>
-              <span class="health-text">{{ player.hitPoints }}/{{ player.maxHitPoints }}</span>
+              <span class="health-text">{{ gameStore.player.hitPoints }}/{{ gameStore.player.maxHitPoints }}</span>
             </div>
           </div>
 
@@ -148,21 +81,21 @@ const currentEnemy = computed(() => {
             <div class="stamina-bar">
               <div
                 class="stamina-fill"
-                :style="{ width: (player.stamina / player.maxStamina * 100) + '%' }"
+                :style="{ width: (gameStore.player.stamina / gameStore.player.maxStamina * 100) + '%' }"
               ></div>
-              <span class="stamina-text">{{ player.stamina }}/{{ player.maxStamina }}</span>
+              <span class="stamina-text">{{ gameStore.player.stamina }}/{{ gameStore.player.maxStamina }}</span>
             </div>
           </div>
 
-          <div v-if="currentEnemy" class="stat-group">
+          <div v-if="gameStore.currentEnemy" class="stat-group">
             <h4>💀 Здоровье врага</h4>
             <div class="health-bar enemy-health-bar">
               <div
                 class="health-fill enemy-health-fill"
-                :style="{ width: (currentEnemy.hitPoints / currentEnemy.maxHitPoints * 100) + '%' }"
+                :style="{ width: (gameStore.currentEnemy.hitPoints / gameStore.currentEnemy.maxHitPoints * 100) + '%' }"
               ></div>
               <span class="health-text">
-                {{ currentEnemy.name }}: {{ currentEnemy.hitPoints }}/{{ currentEnemy.maxHitPoints }}
+                {{ gameStore.currentEnemy.name }}: {{ gameStore.currentEnemy.hitPoints }}/{{ gameStore.currentEnemy.maxHitPoints }}
               </span>
             </div>
           </div>
@@ -170,77 +103,77 @@ const currentEnemy = computed(() => {
 
           <div class="stat-group">
             <h4>⭐ Прогресс</h4>
-            <div class="stat-line">Уровень: {{ player.level }}</div>
+            <div class="stat-line">Уровень: {{ gameStore.player.level }}</div>
             <div class="exp-bar">
               <div 
                 class="exp-fill" 
-                :style="{ width: (player.experience / player.experienceToNext * 100) + '%' }"
+                :style="{ width: (gameStore.player.experience / gameStore.player.experienceToNext * 100) + '%' }"
               ></div>
-              <span class="exp-text">{{ player.experience }}/{{ player.experienceToNext }}</span>
+              <span class="exp-text">{{ gameStore.player.experience }}/{{ gameStore.player.experienceToNext }}</span>
             </div>
           </div>
 
           <div class="stat-group">
             <h4>📈 Характеристики</h4>
-            <div class="stat-line">💪 Сила: {{ player.strength }}</div>
-            <div class="stat-line">⚡ Ловкость: {{ player.dexterity }}</div>
-            <div class="stat-line">🛡️ Телосложение: {{ player.constitution }}</div>
-            <div class="stat-line">🧠 Интеллект: {{ player.intelligence }}</div>
-            <div class="stat-line">🔮 Мудрость: {{ player.wisdom }}</div>
-            <div class="stat-line">😊 Харизма: {{ player.charisma }}</div>
+            <div class="stat-line">💪 Сила: {{ gameStore.player.strength }}</div>
+            <div class="stat-line">⚡ Ловкость: {{ gameStore.player.dexterity }}</div>
+            <div class="stat-line">🛡️ Телосложение: {{ gameStore.player.constitution }}</div>
+            <div class="stat-line">🧠 Интеллект: {{ gameStore.player.intelligence }}</div>
+            <div class="stat-line">🔮 Мудрость: {{ gameStore.player.wisdom }}</div>
+            <div class="stat-line">😊 Харизма: {{ gameStore.player.charisma }}</div>
           </div>
 
-          <div v-if="learnedSkills.length > 0" class="stat-group">
+          <div v-if="gameStore.learnedSkills.length > 0" class="stat-group">
             <h4>📚 Умения</h4>
-            <div v-for="skill in learnedSkills" :key="skill.id" class="skill-item" :title="skill.description">
+            <div v-for="skill in gameStore.learnedSkills" :key="skill.id" class="skill-item" :title="skill.description">
               <div class="skill-name">{{ skill.name }}</div>
               <div class="skill-actions">
                 <button
-                  :class="['action-btn', { 'is-on-cooldown': player.skillCooldowns && player.skillCooldowns[skill.id] > 0 }]"
-                  @click="$emit('command', skill.id)"
-                  :disabled="player.stamina < skill.cost || (player.skillCooldowns && player.skillCooldowns[skill.id] > 0)"
-                  :title="player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (player.skillCooldowns && player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${player.skillCooldowns[skill.id]}` : skill.description"
+                  :class="['action-btn', { 'is-on-cooldown': gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0 }]"
+                  @click="gameStore.processCommand(skill.id)"
+                  :disabled="gameStore.player.stamina < skill.cost || (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0)"
+                  :title="gameStore.player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${gameStore.player.skillCooldowns[skill.id]}` : skill.description"
                 >
                   Использовать
-                  <span v-if="player.skillCooldowns && player.skillCooldowns[skill.id] > 0">
-                    ({{ player.skillCooldowns[skill.id] }})
+                  <span v-if="gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0">
+                    ({{ gameStore.player.skillCooldowns[skill.id] }})
                   </span>
                 </button>
                 <button
-                  v-for="npc in hostileNpcsInRoom"
+                  v-for="npc in gameStore.hostileNpcsInRoom"
                   :key="npc.id"
-                  :class="['action-btn', { 'is-on-cooldown': player.skillCooldowns && player.skillCooldowns[skill.id] > 0 }]"
-                  @click="$emit('command', `${skill.id} ${npc.name}`)"
-                  :disabled="player.stamina < skill.cost || (player.skillCooldowns && player.skillCooldowns[skill.id] > 0)"
-                  :title="player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (player.skillCooldowns && player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${player.skillCooldowns[skill.id]}` : `Применить '${skill.name}' к ${npc.name}`"
+                  :class="['action-btn', { 'is-on-cooldown': gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0 }]"
+                  @click="gameStore.processCommand(`${skill.id} ${npc.name}`)"
+                  :disabled="gameStore.player.stamina < skill.cost || (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0)"
+                  :title="gameStore.player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${gameStore.player.skillCooldowns[skill.id]}` : `Применить '${skill.name}' к ${npc.name}`"
                 >
                   → {{ npc.name }}
-                  <span v-if="player.skillCooldowns && player.skillCooldowns[skill.id] > 0">
-                    ({{ player.skillCooldowns[skill.id] }})
+                  <span v-if="gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0">
+                    ({{ gameStore.player.skillCooldowns[skill.id] }})
                   </span>
                 </button>
               </div>
             </div>
           </div>
 
-          <div v-if="healingPotion" class="stat-group">
+          <div v-if="gameStore.healingPotion" class="stat-group">
             <h4>⚡ Быстрые действия</h4>
             <div class="quick-actions">
               <button
                 class="action-btn"
-                @click="$emit('command', `use ${healingPotion.name}`)"
-                :disabled="player.hitPoints >= player.maxHitPoints"
-                :title="player.hitPoints >= player.maxHitPoints ? 'Вы полностью здоровы' : `Использовать ${healingPotion.name}`"
+                @click="gameStore.processCommand(`use ${gameStore.healingPotion.name}`)"
+                :disabled="gameStore.player.hitPoints >= gameStore.player.maxHitPoints"
+                :title="gameStore.player.hitPoints >= gameStore.player.maxHitPoints ? 'Вы полностью здоровы' : `Использовать ${gameStore.healingPotion.name}`"
               >
-                💖 Лечиться ({{ healingPotion.name }})
+                💖 Лечиться ({{ gameStore.healingPotion.name }})
               </button>
             </div>
           </div>
 
-          <div v-if="player.state === 'fighting'" class="stat-group">
+          <div v-if="gameStore.player.state === 'fighting'" class="stat-group">
             <h4>⚔️ Действия в бою</h4>
             <div class="combat-actions">
-                <button class="action-btn danger" @click="$emit('command', 'flee')">
+                <button class="action-btn danger" @click="gameStore.processCommand('flee')">
                   Сбежать
                 </button>
             </div>
@@ -249,35 +182,28 @@ const currentEnemy = computed(() => {
 
         <!-- Вкладка "Инвентарь" -->
         <div v-if="activeTab === 'inventory'">
-          <InventoryPanel
-            :player="player"
-            :game-engine="gameEngine"
-            @command="$emit('command', $event)"
+          <InventoryPanel 
+            :player="gameStore.player" 
+            :game-engine="gameStore.engine"
+            @command="gameStore.processCommand($event)"
           />
         </div>
 
         <!-- Вкладка "Экипировка" -->
         <div v-if="activeTab === 'equipment'">
-          <EquipmentPanel
-            :player="player"
-            @command="$emit('command', $event)"
+          <EquipmentPanel 
+            :player="gameStore.player"
+            @command="gameStore.processCommand($event)"
           />
         </div>
 
         <!-- Вкладка "Мини-карта" -->
         <div v-if="activeTab === 'map'" class="map-tab-content">
-          <MapPanel
-            :game-engine="gameEngine"
-            :player="player"
-            :game-started="gameStarted"
-            :current-room="currentRoom"
-            @command="$emit('command', $event)"
-            @move="$emit('move', $event)"
-          />
+          <MapPanel />
 
           <ActionsPanel
-            :grouped-actions="groupedActions"
-            @command="$emit('command', $event)"
+            :grouped-actions="gameStore.groupedActions"
+            @command="gameStore.processCommand($event)"
           />
 
         </div>

@@ -31,36 +31,10 @@ export class GameEngine {
     this.messageHistory = []; // История сообщений для вывода в терминал
     this.gameState = 'menu'; // Состояние игры: menu, playing, paused
     this.combatManager = null; // Менеджер текущего боя
-    this.respawnQueue = []; // Очередь для возрождения НПС
-    this.listeners = {}; // Объект для подписчиков на события { eventName: [callback, ...] }
+    this.respawnQueue = []; // Очередь для возрождения НПС    
+    this.onMessage = null; // Колбэк для отправки асинхронных сообщений (бой и т.д.)
 
     this._loadCommands();
-
-    // Основной игровой цикл (тикер) для обработки асинхronных событий, таких как возрождение.
-    // Управление вызовом `update()` передано в компонент GameTerminal.vue.
-  }
-
-  /**
-   * Подписывается на событие
-   * @param {string} eventName 
-   * @param {Function} callback 
-   */
-  on(eventName, callback) {
-    if (!this.listeners[eventName]) {
-      this.listeners[eventName] = [];
-    }
-    this.listeners[eventName].push(callback);
-  }
-
-  /**
-   * Вызывает событие
-   * @param {string} eventName 
-   * @param  {...any} args 
-   */
-  emit(eventName, ...args) {
-    if (this.listeners[eventName]) {
-      this.listeners[eventName].forEach(callback => callback(...args));
-    }
   }
 
   /**
@@ -202,7 +176,7 @@ export class GameEngine {
           const skillData = this.skillsData.get(skillId);
           if (skillData) {
             // Сообщение отправляется через emit, чтобы появиться в терминале
-            this.emit('message', this.colorize(`Умение "${skillData.name}" готово к использованию.`, 'combat-exp-gain'));
+            if (this.onMessage) this.onMessage(this.colorize(`Умение "${skillData.name}" готово к использоварованию.`, 'combat-exp-gain'));
           }
         }
       }
@@ -320,7 +294,7 @@ export class GameEngine {
    */
   startCombat(npc) {
     if (this.combatManager) {
-      this.emit('message', 'Вы уже в бою!');
+      if (this.onMessage) this.onMessage('Вы уже в бою!');
       return;
     }
     this.combatManager = new CombatManager(this, this.player, npc);
@@ -726,7 +700,7 @@ ${this.getCurrentRoom().getFullDescription(this)}
 
     const [targetAreaId] = this.world.parseGlobalId(targetRoomId);
     if (!this.world.loadedAreaIds.has(targetAreaId)) {
-      this.emit('message', `Загрузка новой зоны: ${targetAreaId}...`);
+      if (this.onMessage) this.onMessage(`Загрузка новой зоны: ${targetAreaId}...`);
       await this.world.loadArea(targetAreaId);
     }
 

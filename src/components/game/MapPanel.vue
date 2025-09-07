@@ -1,22 +1,15 @@
 <script setup>
 import { computed } from 'vue';
-
-const props = defineProps({
-  gameEngine: { type: Object, required: true },
-  player: { type: Object, required: true },
-  gameStarted: { type: Boolean, default: false },
-  currentRoom: { type: Object, default: null }
-});
-
-const emit = defineEmits(['command', 'move']);
+import { useGameStore } from '../../stores/game.js';
+const gameStore = useGameStore();
 
 /**
  * @description Вычисляемые свойства для определения текущей зоны и комнаты.
  * Возвращают массив `[areaId, localRoomId]`.
  */
 const currentRoomIds = computed(() => {
-  if (!props.gameStarted || !props.player.currentRoom) return [null, null];
-  return props.gameEngine.world.parseGlobalId(props.player.currentRoom);
+  if (!gameStore.gameStarted || !gameStore.player.currentRoom) return [null, null];
+  return gameStore.engine.world.parseGlobalId(gameStore.player.currentRoom);
 });
 const currentAreaId = computed(() => currentRoomIds.value[0]);
 const currentLocalRoomId = computed(() => currentRoomIds.value[1]);
@@ -26,10 +19,10 @@ const currentLocalRoomId = computed(() => currentRoomIds.value[1]);
  * @type {import('vue').ComputedRef<import('../../game/classes/Room').Room[]>}
  */
 const roomsInCurrentArea = computed(() => {
-  if (!currentAreaId.value || !props.gameEngine.world.rooms.size) return [];
+  if (!currentAreaId.value || !gameStore.engine.world.rooms.size) return [];
   
   const rooms = [];
-  for (const room of props.gameEngine.world.rooms.values()) {
+  for (const room of gameStore.engine.world.rooms.values()) {
     if (room.area === currentAreaId.value && room.map) {
       rooms.push(room);
     }
@@ -53,13 +46,13 @@ const mapDimensions = computed(() => {
  * @returns {Array<{direction: string, targetAreaName: string}>}
  */
 const interZoneExits = computed(() => {
-  if (!props.currentRoom) return [];
+  if (!gameStore.currentRoom) return [];
   const exits = [];
   // Итерируемся по карте выходов текущей комнаты
-  for (const [direction, exitData] of props.currentRoom.exits.entries()) {
+  for (const [direction, exitData] of gameStore.currentRoom.exits.entries()) {
     // Межзоновый выход - это объект, а не строка
     if (typeof exitData === 'object' && exitData.area) {
-      const area = props.gameEngine.world.areas.get(exitData.area);
+      const area = gameStore.engine.world.areas.get(exitData.area);
       exits.push({
         direction,
         targetAreaName: area ? area.name : exitData.area,
@@ -75,11 +68,11 @@ const interZoneExits = computed(() => {
  * @returns {boolean} true, если комната доступна.
  */
 const isRoomAvailable = (localRoomId) => {
-  if (!props.gameStarted) return false;
+  if (!gameStore.gameStarted) return false;
   // Для проверки доступности комнаты на карте мы предполагаем, что она находится в той же зоне.
   // Это ограничение текущей реализации карты.
-  const globalRoomId = props.gameEngine.world.getGlobalId(localRoomId, currentAreaId.value);
-  const availableRooms = props.gameEngine.getAvailableRooms();
+  const globalRoomId = gameStore.engine.world.getGlobalId(localRoomId, currentAreaId.value);
+  const availableRooms = gameStore.engine.getAvailableRooms();
   return availableRooms.includes(globalRoomId);
 };
 
@@ -89,8 +82,8 @@ const isRoomAvailable = (localRoomId) => {
  * @returns {boolean} true, если по комнате можно кликнуть.
  */
 const isRoomClickable = (localRoomId) => {
-  if (!props.gameStarted) return false;
-  if (props.player.state === 'dead') return false;
+  if (!gameStore.gameStarted) return false;
+  if (gameStore.player.state === 'dead') return false;
   return localRoomId !== currentLocalRoomId.value && isRoomAvailable(localRoomId);
 };
 
@@ -100,14 +93,8 @@ const isRoomClickable = (localRoomId) => {
  */
 const moveToRoom = async (localRoomId) => {
   if (!isRoomClickable(localRoomId)) return;
-  const globalRoomId = props.gameEngine.world.getGlobalId(localRoomId, currentAreaId.value);
-
-  const result = await props.gameEngine.moveToRoom(globalRoomId);
-  if (result.success) {
-    emit('move', result.message);
-  } else {
-    emit('move', result.message); // Отправляем сообщение об ошибке в лог
-  }
+  const globalRoomId = gameStore.engine.world.getGlobalId(localRoomId, currentAreaId.value);
+  await gameStore.moveToRoom(globalRoomId);
 };
 </script>
 
@@ -145,7 +132,7 @@ const moveToRoom = async (localRoomId) => {
         <button 
           v-for="exit in interZoneExits" 
           :key="exit.direction"
-          @click="$emit('command', 'go ' + exit.direction)"
+          @click="gameStore.processCommand('go ' + exit.direction)"
         >
           {{ exit.direction }} (в {{ exit.targetAreaName }})
         </button>
