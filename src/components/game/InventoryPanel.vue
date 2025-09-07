@@ -39,8 +39,8 @@ const getTotalWeight = () => {
 };
 
 const currentRoom = computed(() => {
-  if (!props.gameEngine.rooms.size || !props.player.currentRoom) return null;
-  return props.gameEngine.rooms.get(props.player.currentRoom);
+  if (!props.gameEngine.world.rooms.size || !props.player.currentRoom) return null;
+  return props.gameEngine.world.rooms.get(props.player.currentRoom);
 });
 
 const hasTrader = computed(() => {

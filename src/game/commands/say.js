@@ -18,7 +18,7 @@ export default {
 
     // Все НПС в локации реагируют
     const responses = [];
-    const [currentAreaId] = game._parseGlobalId(game.player.currentRoom);
+    const [currentAreaId] = game.world.parseGlobalId(game.player.currentRoom);
     currentRoom.npcs.forEach(localNpcId => {
       const npc = game.getNpc(localNpcId, currentAreaId);
       if (npc?.isAlive()) {

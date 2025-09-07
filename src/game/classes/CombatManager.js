@@ -117,17 +117,17 @@ export class CombatManager {
       const drops = this.npc.getDeathDrops();
       if (drops.length > 0) {
         const currentRoom = this.game.getCurrentRoom();
-        drops.forEach(localItemId => {
-          const globalItemId = this.game._getGlobalId(localItemId, this.npc.area);
+        drops.forEach(localItemId => { 
+          const globalItemId = this.game.world.getGlobalId(localItemId, this.npc.area);
           currentRoom.addItem(globalItemId);
         });
         result += `\n${this.game.colorize(this.npc.name, `npc-name npc-${this.npc.type}`)} что-то оставил.`;
       }
 
-      const deadNpcGlobalId = this.game._getGlobalId(this.npc.id, this.npc.area);
+      const deadNpcGlobalId = this.game.world.getGlobalId(this.npc.id, this.npc.area);
       const deadNpcRoomId = this.player.currentRoom;
       this.game.getCurrentRoom().removeNpc(this.npc.id);
-      this.game.npcLocationMap.delete(deadNpcGlobalId);
+      this.game.world.npcLocationMap.delete(deadNpcGlobalId);
       this.game.scheduleNpcRespawn(deadNpcGlobalId, deadNpcRoomId);
 
       this.stop();
@@ -143,8 +143,8 @@ export class CombatManager {
         const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
         const exit = currentRoom.getExit(randomExitDirection);
         if (typeof exit === 'string') {
-          const targetRoomId = this.game._getGlobalId(exit, currentRoom.area);
-          const targetRoom = this.game.rooms.get(targetRoomId);
+          const targetRoomId = this.game.world.getGlobalId(exit, currentRoom.area);
+          const targetRoom = this.game.world.rooms.get(targetRoomId);
           currentRoom.removeNpc(this.npc.id);
           targetRoom.addNpc(this.npc.id);
           result += '\n' + this.game.colorize(`${this.npc.name} в страхе сбегает!`, 'combat-npc-death');
@@ -166,8 +166,8 @@ export class CombatManager {
             const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
             const exit = currentRoom.getExit(randomExitDirection);
             const targetRoomId = (typeof exit === 'object')
-              ? this.game._getGlobalId(exit.room, exit.area)
-              : this.game._getGlobalId(exit, currentRoom.area);
+              ? this.game.world.getGlobalId(exit.room, exit.area)
+              : this.game.world.getGlobalId(exit, currentRoom.area);
 
             result += '\n' + this.game.colorize(ability.message, 'combat-npc-attack');
             this.stop(); // Останавливаем бой

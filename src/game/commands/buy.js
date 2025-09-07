@@ -13,25 +13,24 @@ export default {
       return 'Что вы хотите купить?';
     }
 
-    const npc = game._getTraderInCurrentRoom();
+    const currentRoom = game.getCurrentRoom();
+    const npc = game._getTraderInCurrentRoom(); // Используем существующий метод в GameEngine
     if (!npc) {
       return 'Здесь нет торговцев.';
     }
 
-    const shopItems = npc.getShopItems();
     const target = cmd.target.toLowerCase();
 
     // Ищем товар в магазине
-    const localItemId = shopItems.find(id => {
-      const item = game.getItem(id, npc.area);
-      return item && item.name.toLowerCase().includes(target);
-    });
+    // Используем хелпер из движка для поиска предмета в магазине
+    const itemToBuy = game._findItemInTraderShop(target);
 
-    if (!localItemId) {
+    if (!itemToBuy) {
       return `${game.colorize(npc.name, `npc-name npc-${npc.type}`)} говорит: "У меня нет такого товара."`;
     }
 
-    const item = game.getItem(localItemId, npc.area);
+    // Создаем новый экземпляр предмета, чтобы не было проблем с мутацией оригинала
+    const item = { ...itemToBuy, globalId: game.world.getGlobalId(itemToBuy.id, itemToBuy.area) };
 
     // Проверяем, может ли игрок нести предмет
     if (!game.player.canCarry(item)) {
@@ -39,7 +38,7 @@ export default {
     }
 
     // В упрощенной версии покупка бесплатная
-    game.player.addItem({ ...item, globalId: game._getGlobalId(item.id, item.area) });
+    game.player.addItem(item);
     return `${game.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Вот ваш ${game.colorize(item.name, 'item-name')}. Пользуйтесь на здоровье!"`;
   }
 };

@@ -22,7 +22,7 @@ export default {
       return `Вы не видите "${cmd.target}" здесь.`;
     }
 
-    const item = game.items.get(globalItemId);
+    const item = game.world.items.get(globalItemId);
     if (!item.canTake) {
       return `Вы не можете взять ${item.name}.`;
     }

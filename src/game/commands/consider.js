@@ -25,7 +25,7 @@ export default {
     // 2. Проверяем предмет в комнате
     const globalItemId = currentRoom.findItem(target, game);
     if (globalItemId) {
-      item = game.items.get(globalItemId);
+      item = game.world.items.get(globalItemId);
       return game._getConsiderItemString(item);
     }
 
@@ -36,7 +36,7 @@ export default {
     }
 
     // 4. Проверяем NPC в комнате
-    const [currentAreaId] = game._parseGlobalId(game.player.currentRoom);
+    const [currentAreaId] = game.world.parseGlobalId(game.player.currentRoom);
     const npcId = currentRoom.findNpc(target, game, currentAreaId);
     if (npcId) {
       const npc = game.getNpc(npcId, currentAreaId);

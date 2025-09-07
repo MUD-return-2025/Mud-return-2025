@@ -69,7 +69,7 @@ const togglePanel = () => {
  */
 const currentRoom = computed(() => {
   if (!props.gameStarted || !props.player.currentRoom) return null;
-  return props.gameEngine.rooms.get(props.player.currentRoom);
+  return props.gameEngine.world.rooms.get(props.player.currentRoom);
 });
 
 /** @description Вычисляемое свойство, возвращающее список доступных действий. */

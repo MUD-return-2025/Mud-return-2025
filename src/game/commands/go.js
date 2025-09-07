@@ -33,8 +33,8 @@ export default {
     }
 
     const targetRoomId = (typeof exit === 'object')
-      ? game._getGlobalId(exit.room, exit.area)
-      : game._getGlobalId(exit, currentRoom.area);
+      ? game.world.getGlobalId(exit.room, exit.area)
+      : game.world.getGlobalId(exit, currentRoom.area);
 
     const result = await game.moveToRoom(targetRoomId, direction);
 

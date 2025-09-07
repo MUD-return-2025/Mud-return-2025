@@ -127,7 +127,7 @@ export class Room {
         const exitData = this.getExit(exit);
         if (typeof exitData === 'object') {
           // Если выход - это объект, значит это межзоновый переход
-          const area = game.areas.get(exitData.area);
+          const area = game.world.areas.get(exitData.area);
           return colorize(`${exit} (в ${area?.name || exitData.area})`, 'exit-name');
         }
         return colorize(exit, 'exit-name');
@@ -139,7 +139,7 @@ export class Room {
     if (this.items.length > 0) {
       desc += '\nВы видите:\n';
       this.items.forEach(globalId => { 
-        const item = game.items.get(globalId); 
+        const item = game.world.items.get(globalId); 
         if (item) desc += `  ${colorize(item.name, 'item-name')}\n`; 
       });
     }
@@ -161,7 +161,7 @@ export class Room {
    */
   findItem(targetName, game) {
     return this.items.find(globalId => {
-      const item = game.items.get(globalId);
+      const item = game.world.items.get(globalId);
       return item && (item.name.toLowerCase().includes(targetName) || item.id.toLowerCase().includes(targetName));
     });
   }

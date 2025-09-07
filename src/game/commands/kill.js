@@ -17,7 +17,7 @@ export default {
       return 'Кого вы хотите атаковать?';
     }
 
-    const [currentAreaId] = game._parseGlobalId(game.player.currentRoom);
+    const [currentAreaId] = game.world.parseGlobalId(game.player.currentRoom);
     const currentRoom = game.getCurrentRoom();
     const target = cmd.target.toLowerCase();
 

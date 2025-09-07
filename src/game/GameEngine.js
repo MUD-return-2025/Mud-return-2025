@@ -1,6 +1,7 @@
 
 import { Player } from './classes/Player.js';
 import { Room } from './classes/Room.js';
+import { WorldManager } from './classes/WorldManager.js';
 import { NPC } from './classes/NPC.js';
 import { CombatManager } from './classes/CombatManager.js';
 import { CommandParser } from './classes/CommandParser.js';
@@ -22,21 +23,15 @@ export class GameEngine {
 
   constructor() {
     this.player = new Player();
+    this.world = new WorldManager(this);
     this.commandParser = new CommandParser();
 
-    // Глобальные хранилища для всех загруженных данных
-    this.rooms = new Map(); // Карта комнат, ключ - глобальный ID
-    this.items = new Map(); // Карта предметов, ключ - глобальный ID
-    this.npcs = new Map(); // Карта NPC, ключ - глобальный ID
-    this.areas = new Map(); // Карта метаданных загруженных зон
     this.skillsData = new Map(); // Карта умений, ключ - ID умения
-    this.loadedAreaIds = new Set(); // Набор ID уже загруженных зон
 
     this.messageHistory = []; // История сообщений для вывода в терминал
     this.gameState = 'menu'; // Состояние игры: menu, playing, paused
     this.combatManager = null; // Менеджер текущего боя
     this.respawnQueue = []; // Очередь для возрождения НПС
-    this.npcLocationMap = new Map(); // Карта <globalNpcId, globalRoomId>
     this.listeners = {}; // Объект для подписчиков на события { eventName: [callback, ...] }
 
     this._loadCommands();
@@ -73,7 +68,7 @@ export class GameEngine {
    * Должен вызываться асинхронно после создания экземпляра.
    */
   async initializeWorld() {
-    await this.loadArea('midgard');
+    await this.world.loadArea('midgard');
     await this.initializeSkills();
   }
 
@@ -92,72 +87,6 @@ export class GameEngine {
       }
     } catch (error) {
       console.error('Ошибка при загрузке умений:', error);
-    }
-  }
-
-  /**
-   * Загружает игровую зону (area) из JSON файла.
-   * @param {string} areaId - ID зоны для загрузки (например, 'midgard').
-   */
-  async loadArea(areaId) {
-    if (this.loadedAreaIds.has(areaId)) {
-      console.log(`Зона ${areaId} уже загружена.`);
-      return true;
-    }
-
-    try {
-      const response = await fetch(`/src/game/data/areas/${areaId}.json`);
-      if (!response.ok) {
-        throw new Error(`Не удалось загрузить зону: ${areaId}`);
-      }
-      const areaData = await response.json();
-
-      // Сохраняем метаданные зоны
-      this.areas.set(areaId, {
-        id: areaData.id,
-        name: areaData.name,
-        description: areaData.description,
-      });
-
-      // Загружаем предметы с глобальными ID
-      for (const [localId, itemData] of Object.entries(areaData.items)) {
-        this.items.set(`${areaId}:${localId}`, { id: localId, area: areaId, ...itemData });
-      }
-
-      // Загружаем NPC с глобальными ID
-      for (const [localId, npcData] of Object.entries(areaData.npcs)) {
-        this.npcs.set(`${areaId}:${localId}`, new NPC({ id: localId, area: areaId, ...npcData }));
-      }
-
-      // Загружаем комнаты с глобальными ID
-      for (const [localId, roomData] of Object.entries(areaData.rooms)) {
-        this.rooms.set(`${areaId}:${localId}`, new Room({ id: localId, area: areaId, ...roomData }));
-      }
-
-      this._buildNpcLocationMapForArea(areaId);
-
-      this.loadedAreaIds.add(areaId);
-      console.log(`Зона ${areaId} успешно загружена.`);
-      return true;
-    } catch (error) {
-      console.error(`Ошибка при загрузке зоны ${areaId}:`, error);
-      return false;
-    }
-  }
-
-  /**
-   * Индексирует начальное положение всех NPC в указанной зоне.
-   * @param {string} areaId
-   * @private
-   */
-  _buildNpcLocationMapForArea(areaId) {
-    for (const [globalRoomId, room] of this.rooms.entries()) {
-      if (room.area === areaId) {
-        for (const localNpcId of room.npcs) {
-          const globalNpcId = this._getGlobalId(localNpcId, areaId);
-          this.npcLocationMap.set(globalNpcId, globalRoomId);
-        }
-      }
     }
   }
 
@@ -237,12 +166,12 @@ export class GameEngine {
 
     this.respawnQueue = this.respawnQueue.filter(entry => {
       if (now >= entry.respawnTime) {
-        const [areaId, npcId] = this._parseGlobalId(entry.globalNpcId);
+        const [areaId, npcId] = this.world.parseGlobalId(entry.globalNpcId);
         const npc = this.getNpc(npcId, areaId);
-        const room = this.rooms.get(entry.roomId); // entry.roomId - это globalRoomId
+        const room = this.world.rooms.get(entry.roomId); // entry.roomId - это globalRoomId
         // Возрождаем, только если НПС еще не в комнате
         if (npc && room && !room.hasNpc(npcId)) {
-          this.npcLocationMap.set(entry.globalNpcId, entry.roomId);
+          this.world.npcLocationMap.set(entry.globalNpcId, entry.roomId);
           npc.respawn(this);
           room.addNpc(npc.id); // Используем локальный ID
           if (this.player.currentRoom === entry.roomId) {
@@ -289,13 +218,13 @@ export class GameEngine {
     const messages = [];
     const WANDER_CHANCE = 0.05; // 5% шанс в секунду на перемещение
     const combatNpcGlobalId = this.combatManager
-      ? this._getGlobalId(this.combatManager.npc.id, this.combatManager.npc.area)
+      ? this.world.getGlobalId(this.combatManager.npc.id, this.combatManager.npc.area)
       : null;
-    for (const [globalNpcId, currentNpcRoomId] of this.npcLocationMap.entries()) {
-      const npc = this.npcs.get(globalNpcId);
+    for (const [globalNpcId, currentNpcRoomId] of this.world.npcLocationMap.entries()) {
+      const npc = this.world.npcs.get(globalNpcId);
       // Проверяем, может ли NPC перемещаться и не находится ли он в бою
       if (npc && npc.canWander && npc.isAlive() && globalNpcId !== combatNpcGlobalId && Math.random() < WANDER_CHANCE) {
-        const currentNpcRoom = this.rooms.get(currentNpcRoomId);
+        const currentNpcRoom = this.world.rooms.get(currentNpcRoomId);
 
         if (currentNpcRoom) {
           const exits = currentNpcRoom.getExits();
@@ -305,11 +234,11 @@ export class GameEngine {
 
             // Перемещаемся только внутри текущей зоны для простоты
             if (typeof exit === 'string') {
-              const targetRoomId = this._getGlobalId(exit, currentNpcRoom.area);
-              const targetRoom = this.rooms.get(targetRoomId);
+              const targetRoomId = this.world.getGlobalId(exit, currentNpcRoom.area);
+              const targetRoom = this.world.rooms.get(targetRoomId);
               currentNpcRoom.removeNpc(npc.id);
               targetRoom.addNpc(npc.id);
-              this.npcLocationMap.set(globalNpcId, targetRoomId); // Обновляем карту
+              this.world.npcLocationMap.set(globalNpcId, targetRoomId); // Обновляем карту
 
               // Если игрок в одной из комнат, оповещаем его
               if (this.player.currentRoom === currentNpcRoomId) {
@@ -331,7 +260,7 @@ export class GameEngine {
    * @param {string} roomId - ID комнаты, где НПС должен возродиться.
    */
   scheduleNpcRespawn(globalNpcId, roomId) {
-    const npc = this.npcs.get(globalNpcId);
+    const npc = this.world.npcs.get(globalNpcId);
     // Возрождаем только враждебных НПС (например, крыс)
     if (!npc || npc.type !== 'hostile') {
       return;
@@ -354,7 +283,7 @@ export class GameEngine {
     const currentRoom = this.getCurrentRoom();
     if (!currentRoom) return null;
 
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
+    const [currentAreaId, ] = this.world.parseGlobalId(this.player.currentRoom);
     const merchantId = currentRoom.npcs.find(localNpcId => {
       const npc = this.getNpc(localNpcId, currentAreaId);
       return npc && npc.isAlive() && npc.canTrade && npc.canTrade();
@@ -580,7 +509,7 @@ export class GameEngine {
    * @returns {Room} объект локации
    */
   getCurrentRoom() {
-    return this.rooms.get(this.player.currentRoom);
+    return this.world.rooms.get(this.player.currentRoom);
   }
 
   /**
@@ -590,7 +519,7 @@ export class GameEngine {
    * @returns {Object|null} данные предмета
    */
   getItem(localId, areaId) {
-    return this.items.get(this._getGlobalId(localId, areaId)) || null;
+    return this.world.getItem(localId, areaId);
   }
 
   /**
@@ -600,66 +529,22 @@ export class GameEngine {
    * @returns {NPC|null} объект НПС
    */
   getNpc(localId, areaId) {
-    return this.npcs.get(this._getGlobalId(localId, areaId)) || null;
+    return this.world.getNpc(localId, areaId);
   }
 
-  /**
-   * Собирает глобальный ID из локального ID и ID зоны.
-   * @param {string} localId 
-   * @param {string} areaId 
-   * @returns {string} Глобальный ID (например, 'midgard:center')
-   */
-  _getGlobalId(localId, areaId) {
-    return `${areaId}:${localId}`;
-  }
-
-  /**
-   * Разбирает глобальный ID на ID зоны и локальный ID.
-   * @param {string} globalId 
-   * @returns {[string, string]} [areaId, localId]
-   */
-  _parseGlobalId(globalId) {
-    const parts = globalId.split(':');
-    return [parts[0], parts.slice(1).join(':')];
-  }
   /**
    * Сбрасывает состояние игрового мира до начального.
    * Используется перед началом новой игры или загрузкой.
    * @private
    */
   _resetWorldState() {
-    // Очищаем состояние мира, которое загружается из файлов зон
-    this.rooms.clear();
-    this.items.clear();
-    this.npcs.clear();
-    this.areas.clear();
-    this.loadedAreaIds.clear();
-    this.npcLocationMap.clear();
+    this.world.reset();
 
     // Очищаем временное состояние игры
     if (this.combatManager) {
       this.combatManager.stop();
     }
     this.respawnQueue = [];
-    this.gameState = 'menu';
-  }
-
-  /**
-   * Синхронизирует массивы `npcs` во всех комнатах на основе `npcLocationMap`.
-   * Необходимо вызывать после загрузки состояния, чтобы комнаты "знали", какие NPC в них находятся.
-   * @private
-   */
-  _syncRoomsFromNpcMap() {
-    // 1. Очищаем всех NPC из всех комнат
-    for (const room of this.rooms.values()) {
-      room.npcs = [];
-    }
-    // 2. Заполняем комнаты NPC на основе карты их местоположений
-    for (const [globalNpcId, globalRoomId] of this.npcLocationMap.entries()) {
-      const room = this.rooms.get(globalRoomId);
-      const [, localNpcId] = this._parseGlobalId(globalNpcId);
-      if (room) room.addNpc(localNpcId);
-    }
   }
   /**
    * Сохранение игры в localStorage
@@ -688,24 +573,24 @@ export class GameEngine {
         deathRoom: this.player.deathRoom,
         ui_version: this.player.ui_version || 0
       },
-      loadedAreaIds: Array.from(this.loadedAreaIds),
+      loadedAreaIds: Array.from(this.world.loadedAreaIds),
       worldState: {
         npcs: {},
         rooms: {},
-        npcLocations: Array.from(this.npcLocationMap.entries()),
+        npcLocations: Array.from(this.world.npcLocationMap.entries()),
       },
       timestamp: Date.now()
     };
     
     // Сохраняем состояние каждого NPC (только то, что меняется)
-    for (const [globalNpcId, npc] of this.npcs.entries()) {
+    for (const [globalNpcId, npc] of this.world.npcs.entries()) {
       gameData.worldState.npcs[globalNpcId] = {
         hitPoints: npc.hitPoints,
       };
     }
 
     // Сохраняем состояние каждой комнаты (только то, что меняется)
-    for (const [globalRoomId, room] of this.rooms.entries()) {
+    for (const [globalRoomId, room] of this.world.rooms.entries()) {
       gameData.worldState.rooms[globalRoomId] = {
         items: room.items,
       };
@@ -733,7 +618,7 @@ export class GameEngine {
 
       // Загружаем все зоны, которые были активны в сохраненной игре
       for (const areaId of gameData.loadedAreaIds) {
-        await this.loadArea(areaId);
+        await this.world.loadArea(areaId);
       }
 
       this.player.load(gameData.player);
@@ -743,7 +628,7 @@ export class GameEngine {
         // Восстанавливаем состояние NPC
         if (gameData.worldState.npcs) {
           for (const [globalNpcId, npcState] of Object.entries(gameData.worldState.npcs)) {
-            const npc = this.npcs.get(globalNpcId);
+            const npc = this.world.npcs.get(globalNpcId);
             if (npc) {
               npc.hitPoints = npcState.hitPoints;
             }
@@ -752,15 +637,15 @@ export class GameEngine {
         // Восстанавливаем состояние комнат (предметы на полу)
         if (gameData.worldState.rooms) {
           for (const [globalRoomId, roomState] of Object.entries(gameData.worldState.rooms)) {
-            const room = this.rooms.get(globalRoomId);
+            const room = this.world.rooms.get(globalRoomId);
             if (room) {
               room.items = roomState.items;
             }
           }
         }
         // Восстанавливаем карту расположения NPC
-        this.npcLocationMap = new Map(gameData.worldState.npcLocations || []);
-        this._syncRoomsFromNpcMap();
+        this.world.npcLocationMap = new Map(gameData.worldState.npcLocations || []);
+        this.world.syncRoomsFromNpcMap();
       }
 
       // Сбрасываем временные состояния игрока, которые не должны сохраняться
@@ -768,6 +653,7 @@ export class GameEngine {
         this.player.state = 'idle';
       }
       
+      this.gameState = 'menu';
       this.gameState = 'playing';
 
       return true;
@@ -783,6 +669,7 @@ export class GameEngine {
    */
   async startNewGame(playerName = 'Игрок') {
     this._resetWorldState();
+    this.gameState = 'menu';
     this.messageHistory = [];
     this.player.reset(playerName);
     await this.initializeWorld(); // Мир загружается после сброса игрока
@@ -818,9 +705,9 @@ ${this.getCurrentRoom().getFullDescription(this)}
     const currentRoom = this.getCurrentRoom();
     if (!currentRoom) return [];
 
-    const [currentAreaId, ] = this._parseGlobalId(this.player.currentRoom);
+    const [currentAreaId, ] = this.world.parseGlobalId(this.player.currentRoom);
 
-    return Array.from(currentRoom.exits.values()).map(exit => (typeof exit === 'string' ? this._getGlobalId(exit, currentAreaId) : this._getGlobalId(exit.room, exit.area)));
+    return Array.from(currentRoom.exits.values()).map(exit => (typeof exit === 'string' ? this.world.getGlobalId(exit, currentAreaId) : this.world.getGlobalId(exit.room, exit.area)));
   }
 
   /**
@@ -837,10 +724,10 @@ ${this.getCurrentRoom().getFullDescription(this)}
       return { success: false, message: 'Вы мертвы и не можете двигаться.' };
     }
 
-    const [targetAreaId] = this._parseGlobalId(targetRoomId);
-    if (!this.loadedAreaIds.has(targetAreaId)) {
+    const [targetAreaId] = this.world.parseGlobalId(targetRoomId);
+    if (!this.world.loadedAreaIds.has(targetAreaId)) {
       this.emit('message', `Загрузка новой зоны: ${targetAreaId}...`);
-      await this.loadArea(targetAreaId);
+      await this.world.loadArea(targetAreaId);
     }
 
     // Если направление не было передано (например, при клике на карту), пробуем найти его.
@@ -848,8 +735,8 @@ ${this.getCurrentRoom().getFullDescription(this)}
       const currentRoom = this.getCurrentRoom();
       for (const [dir, exit] of currentRoom.exits.entries()) {
         const exitGlobalId = (typeof exit === 'object')
-          ? this._getGlobalId(exit.room, exit.area)
-          : this._getGlobalId(exit, currentRoom.area);
+          ? this.world.getGlobalId(exit.room, exit.area)
+          : this.world.getGlobalId(exit, currentRoom.area);
         if (exitGlobalId === targetRoomId) {
           direction = dir;
           break;
@@ -901,7 +788,7 @@ ${this.getCurrentRoom().getFullDescription(this)}
 
     // --- Группировка действий по каждому предмету ---
     currentRoom.items
-      .map(globalItemId => this.items.get(globalItemId))
+      .map(globalItemId => this.world.items.get(globalItemId))
       .filter(Boolean)
       .forEach(item => {
         groupedActions.push({
@@ -953,15 +840,15 @@ ${this.getCurrentRoom().getFullDescription(this)}
         .map(cmd => ({ text: cmd, type: 'command' }));
     }
 
-    const suggestFrom = (items, type) => {
+    const suggestFrom = (items, type) => { // `items` здесь - это массив объектов, а не ID
       if (!items) return;
       items
         .filter(item => item && item.name.toLowerCase().startsWith(lowerPrefix))
         .forEach(item => suggestions.push({ text: item.name, type }));
     };
 
-    const itemsInRoom = currentRoom?.items.map(id => this.items.get(id)).filter(Boolean) || [];
-    const npcsInRoom = currentRoom?.npcs.map(id => this.getNpc(id, currentRoom.area)).filter(npc => npc && npc.isAlive()) || [];
+    const itemsInRoom = currentRoom?.items.map(id => this.world.items.get(id)).filter(Boolean) || [];
+    const npcsInRoom = currentRoom?.npcs.map(id => this.world.getNpc(id, currentRoom.area)).filter(npc => npc && npc.isAlive()) || [];
     const itemsInInventory = this.player.inventory;
 
     switch (command) {

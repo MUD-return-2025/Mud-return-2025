@@ -26,7 +26,7 @@ export default {
     }
     game.player.currentRoom = respawnRoomId;
 
-    const respawnRoom = game.rooms.get(respawnRoomId);
+    const respawnRoom = game.world.rooms.get(respawnRoomId);
 
     return game.colorize('Вы чувствуете, как жизнь возвращается в ваше тело. Мир вновь обретает краски.', 'player-respawn') + `\n\n` +
            respawnRoom.getFullDescription(game);

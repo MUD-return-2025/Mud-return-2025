@@ -13,7 +13,7 @@ export default {
       return 'С кем вы хотите поговорить?';
     }
 
-    const [currentAreaId] = game._parseGlobalId(game.player.currentRoom);
+    const [currentAreaId] = game.world.parseGlobalId(game.player.currentRoom);
     const currentRoom = game.getCurrentRoom();
     const target = cmd.target.toLowerCase();
 

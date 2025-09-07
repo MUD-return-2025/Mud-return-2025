@@ -28,7 +28,7 @@ export default {
     // Ищем среди предметов в комнате
     const globalItemId = currentRoom.findItem(target, game);
     if (globalItemId) {
-      const item = game.items.get(globalItemId);
+      const item = game.world.items.get(globalItemId);
       return item.description + (item.readText ? `\n\nНа ${game.colorize(item.name, 'item-name')} написано: "${item.readText}"` : '');
     }
 
@@ -45,7 +45,7 @@ export default {
     }
 
     // Ищем среди НПС
-    const [currentAreaId] = game._parseGlobalId(game.player.currentRoom);
+    const [currentAreaId] = game.world.parseGlobalId(game.player.currentRoom);
     const npcIdInRoom = currentRoom.findNpc(target, game, currentAreaId);
     if (npcIdInRoom) {
       const npc = game.getNpc(npcIdInRoom, currentAreaId);

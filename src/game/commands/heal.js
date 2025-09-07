@@ -10,7 +10,7 @@ export default {
    */
   execute(game, cmd) {
     const currentRoom = game.getCurrentRoom();
-    const [currentAreaId] = game._parseGlobalId(game.player.currentRoom);
+    const [currentAreaId] = game.world.parseGlobalId(game.player.currentRoom);
 
     const priestId = currentRoom.npcs.find(localNpcId => {
       const npc = game.getNpc(localNpcId, currentAreaId);
