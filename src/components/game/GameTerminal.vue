@@ -346,6 +346,10 @@ onMounted(async () => {
   white-space: pre-wrap;
 }
 
+.message :deep(.user-input) {
+  color: #aaaaaa; /* Gray */
+}
+
 .message :deep(.room-name) {
   color: #00ffff; /* Cyan */
   font-weight: bold;

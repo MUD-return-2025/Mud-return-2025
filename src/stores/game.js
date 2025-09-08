@@ -105,7 +105,7 @@ export const useGameStore = defineStore('game', () => {
   async function processCommand(input) {
     if (!input) return;
 
-    _addMessages(`> ${input}`);
+    _addMessages(engine.colorize(`> ${input}`, 'user-input'));
 
     if (!gameStarted.value) {
       const [command, ...args] = input.split(/\s+/);

@@ -122,13 +122,15 @@ export class CommandManager {
   generateHelp() {
     let helpText = 'Доступные команды:\n';
     const commandList = [];
+    const c = this.game.colorize;
     // Для красоты выровняем все команды по левому краю
     const maxCmdLength = Math.max(...Array.from(this.commands.keys()).map(cmd => cmd.length));
 
     this.commands.forEach((cmd, name) => {
-      const paddedName = name.padEnd(maxCmdLength, ' ');
-      const aliases = cmd.aliases.length > 0 ? ` (синонимы: ${cmd.aliases.join(', ')})` : '';
-      commandList.push(`  ${paddedName} - ${cmd.description}${aliases}`);
+      const coloredName = c(name, 'exit-name');
+      const padding = ' '.repeat(maxCmdLength - name.length);
+      const aliases = cmd.aliases.length > 0 ? ` (${c('синонимы', 'item-name')}: ${cmd.aliases.join(', ')})` : '';
+      commandList.push(`  ${coloredName}${padding} - ${cmd.description}${aliases}`);
     });
 
     return helpText + commandList.join('\n');
