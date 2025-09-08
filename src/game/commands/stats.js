@@ -28,6 +28,11 @@ export default {
     const expEmptyLength = 10 - expFullLength;
     const expBar = `${c('█', 'room-name').repeat(expFullLength)}${c('░', 'npc-dead').repeat(expEmptyLength)}`;
 
+    const staminaPercentage = p.maxStamina > 0 ? p.stamina / p.maxStamina : 0;
+    const staminaFullLength = Math.round(10 * staminaPercentage);
+    const staminaEmptyLength = 10 - staminaFullLength;
+    const staminaBar = `${c('█', 'exit-name').repeat(staminaFullLength)}${c('░', 'npc-dead').repeat(staminaEmptyLength)}`;
+
     const header = c(`---[ Характеристики: ${p.name} ]--------`, 'room-name');
     const footer = c('------------------------------------', 'room-name');
 
@@ -35,6 +40,7 @@ export default {
       `  ${c('Уровень:'.padEnd(15), 'item-name')} ${p.level}`,
       `  ${c('Опыт:'.padEnd(15), 'item-name')} [${expBar}] ${p.experience}/${p.experienceToNext}`,
       `  ${c('Здоровье:'.padEnd(15), 'item-name')} [${hpBar}] ${p.hitPoints}/${p.maxHitPoints}`,
+      `  ${c('Выносливость:'.padEnd(15), 'item-name')} [${staminaBar}] ${p.stamina}/${p.maxStamina}`,
       ``,
       `  💪 ${c('Сила:'.padEnd(13), 'item-name')} ${p.strength}`,
       `  ⚡ ${c('Ловкость:'.padEnd(13), 'item-name')} ${p.dexterity}`,
