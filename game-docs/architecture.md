@@ -3,87 +3,59 @@
 
 ## Общая архитектура
 
+Проект построен на разделении логики (Игровой движок) и представления (UI компоненты Vue). Связующим звеном между ними выступает хранилище **Pinia**, что обеспечивает реактивность и предсказуемое управление состоянием.
+
 ### Паттерны проектирования
 
-1. **Model-View-ViewModel (MVVM)** - Vue.js компоненты как View, реактивные данные как ViewModel
-2. **Command Pattern** - для обработки игровых команд
-3. **State Pattern** - для состояний игрока (idle, fighting, dead)
-4. **Factory Pattern** - для создания предметов и NPC
+1.  **Model-View-ViewModel (MVVM)**: Vue-компоненты (`View`), хранилище Pinia (`ViewModel`), классы игрового движка (`Model`).
+2.  **Command Pattern**: Для обработки и инкапсуляции игровых команд (`/src/game/commands`).
+3.  **State Pattern**: Для состояний игрока (`idle`, `fighting`, `dead`).
+4.  **Manager/Coordinator Pattern**: `GameEngine` выступает как координатор, делегируя задачи специализированным менеджерам.
 
 ### Основные модули
 
-#### 1. GameEngine (Игровой движок)
-```javascript
-class GameEngine {
-  - player: Player
-  - rooms: Map<string, Room>
-  - npcs: Map<string, NPC>
-  - commandParser: CommandManager
-  - combatTarget: NPC | null
-  - messageHistory: Array<string>
-  - gameState: string
-  
-  + processCommand(input: string): string
-  + saveGame(): void
-  + loadGame(): void
-}
-```
+#### 1. UI Layer (Vue + Pinia)
+-   **Vue Components** (`/src/components`): Отвечают за отображение информации и перехват действий пользователя.
+-   **Pinia Store (`/src/stores/game.js`)**: Центральное хранилище состояния для UI. Хранит реактивные копии данных из движка и предоставляет `actions` для взаимодействия с ним.
 
-#### 2. Player (Игрок)
-```javascript
-class Player {
-  - name: string
-  - level: number
-  - experience: number
-  - hitPoints: number
-  - maxHitPoints: number
-  - inventory: Array<Object> // Массив объектов предметов
-  - state: 'idle' | 'fighting' | 'dead'
-  - equippedWeapon: Item | null
-  - equippedArmor: Item | null
-  - currentRoom: string
-}
-```
-
-#### 3. Room (Локация)
-```javascript
-class Room {
-  - id: string
-  - name: string
-  - description: string
-  - exits: Map<string, string>
-  - items: Array<Item>
-  - npcs: Array<NPC>
-  
-  + getExits(): Array<string>
-  + addItem(item: Item): void
-  + removeItem(itemId: string): Item
-}
-```
-
-#### 4. CommandManager (Парсер команд)
-```javascript
-class CommandManager {
-  - commands: Map<string, Function>
-  
-  + parseCommand(input: string): Command
-  + executeCommand(command: Command): string
-  + registerCommand(name: string, handler: Function): void
-}
-```
+#### 2. Game Logic Layer (Игровой движок)
+-   **GameEngine (`/src/game/GameEngine.js`)**: Центральный класс-координатор. Не хранит в себе сложной логики, а делегирует ее менеджерам. Связывает все части движка воедино.
+-   **WorldManager**: Управляет загрузкой и состоянием игрового мира (зоны, комнаты, предметы, NPC).
+-   **CommandManager**: Регистрирует, парсит и выполняет команды, введенные пользователем.
+-   **TickManager**: Управляет событиями, происходящими с течением времени (каждую секунду): респаун NPC, их перемещение, кулдауны умений.
+-   **CombatManager**: Управляет логикой одного конкретного боевого столкновения.
+-   **ActionGenerator**: Генерирует список контекстных действий для UI-панели.
+-   **Data-классы** (`Player`, `NPC`, `Room`): Представляют основные сущности игрового мира.
 
 ## Поток данных
 
-1. **Пользователь вводит команду** → GameInput.vue
-2. **GameTerminal.vue вызывает `gameEngine.processCommand()`**
-3. **GameEngine использует CommandManager** для разбора и выполнения команды
-4. **Команда изменяет состояние** (объекты Player, Room, NPC) внутри GameEngine
-5. **GameTerminal.vue обновляет реактивный объект `player`**, что вызывает перерисовку UI (включая PlayerStatsPanel)
+1.  **Пользователь взаимодействует с UI** (вводит команду в `GameTerminal.vue` или нажимает кнопку в `ActionsPanel.vue`).
+2.  **Компонент вызывает действие (action) в хранилище Pinia** (например, `gameStore.processCommand('kill rat')`).
+3.  **Хранилище Pinia (`game.js`) вызывает соответствующий метод у экземпляра `GameEngine`**.
+4.  **`GameEngine` делегирует задачу нужному менеджеру** (например, `commandManager.execute(...)`).
+5.  **Менеджер выполняет логику**, изменяя состояние моделей (объектов `Player`, `Room`, `NPC`) внутри `GameEngine`.
+6.  **Асинхронные события** (например, раунды боя из `CombatManager` или сообщения из `TickManager`) отправляются в UI через колбэк `engine.onMessage`, который также вызывает действие в Pinia.
+7.  **Хранилище Pinia обновляет свои реактивные данные**, копируя их из `GameEngine`.
+8.  **UI, подписанный на геттеры и состояние хранилища, автоматически перерисовывается**, отображая изменения.
+
+Схематично поток выглядит так:
+
+`UI Components` → `Pinia Store Actions` → `GameEngine Methods` → `Managers` → `State Models` → `Pinia Store State/Getters` → `UI Components`
 
 ## Управление состоянием
-Основной компонент `GameTerminal.vue` владеет единственным экземпляром `GameEngine`. Состояние игрока (`player`) является реактивным объектом (`reactive`) и передается в дочерний компонент `PlayerStatsPanel.vue` через props. `PlayerStatsPanel` отправляет команды обратно в `GameTerminal` через emit-события (`@command`, `@move`), которые затем обрабатываются `GameEngine`. Это обеспечивает однонаправленный поток данных.
+
+Ключевой аспект архитектуры — разделение "чистого" состояния движка и "реактивного" состояния для UI.
+
+-   **`GameEngine`** является "источником правды" (source of truth). Все игровые объекты и их состояния (HP, инвентарь, положение NPC) хранятся и изменяются только внутри него и его менеджеров. Движок ничего не знает о Vue или реактивности.
+-   **`useGameStore` (Pinia)** содержит *реактивные копии* ключевых данных, необходимых для отображения (`player`, `messages`, `currentRoom` и т.д.). Оно предоставляет `actions` для безопасного взаимодействия с движком и `getters` для получения вычисляемых данных.
+-   Такой подход позволяет держать игровую логику полностью изолированной и тестируемой, в то время как UI остается декларативным и реактивным благодаря Pinia.
 
 ## Система команд
+
+Система команд инкапсулирована в `CommandManager` и модулях в папке `/src/game/commands`.
+
+-   **`CommandManager`**: Отвечает за регистрацию, парсинг псевдонимов и вызов обработчика команды.
+-   **Файлы команд** (`/src/game/commands/look.js`, `kill.js` и т.д.): Каждый файл экспортирует объект с именем команды, псевдонимами, описанием и функцией `execute`, которая принимает экземпляр `game` и выполняет всю логику.
 
 ### Базовые команды
 - **look** [target] - осмотреть локацию или предмет
@@ -96,10 +68,11 @@ class CommandManager {
 
 ### Боевые команды
 - **kill** <target> - атаковать цель
+- **kick** <target> - использовать умение "пинок"
+- **flee** - сбежать из боя
 
 ### Команды взаимодействия
 - **use** <item> - использовать предмет
-- **say** <message> - сказать что-то
 - **equip** <item> - экипировать предмет
 - **unequip** <weapon|armor> - снять предмет
 - **list** - посмотреть товары
