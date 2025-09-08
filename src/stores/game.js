@@ -49,6 +49,11 @@ export const useGameStore = defineStore('game', () => {
     return engine.getAvailableActions ? engine.getAvailableActions() : [];
   });
 
+  const radarData = computed(() => {
+    if (!gameStarted.value) return [];
+    return engine.scanForHostiles ? engine.scanForHostiles() : [];
+  });
+
   // --- Actions ---
 
   /**
@@ -172,6 +177,7 @@ export const useGameStore = defineStore('game', () => {
     healingPotion,
     learnedSkills,
     groupedActions,
+    radarData,
 
     // Actions
     initialize,

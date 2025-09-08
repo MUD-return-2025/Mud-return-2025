@@ -6,6 +6,7 @@ import EquipmentPanel from './EquipmentPanel.vue';
 import InventoryPanel from './InventoryPanel.vue';
 import ActionsPanel from './ActionsPanel.vue';
 import MapPanel from './MapPanel.vue';
+import RadarPanel from './RadarPanel.vue';
 
 const gameStore = useGameStore();
 
@@ -209,6 +210,8 @@ const togglePanel = () => {
         </div>
       </div>
     </div>
+    
+    <RadarPanel />
   </div>
 </template>
 

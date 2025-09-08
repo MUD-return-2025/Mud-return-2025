@@ -369,6 +369,43 @@ export class GameEngine {
     return Math.max(1, avgDamage);
   }
 
+  /**
+   * Сканирует соседние комнаты на наличие враждебных существ.
+   * @returns {Array<{direction: string, hostiles: Array<{name: string, count: number}>}>}
+   */
+  scanForHostiles() {
+    const currentRoom = this.getCurrentRoom();
+    if (!currentRoom) return [];
+
+    const hostilesByDirection = [];
+
+    for (const [direction, exit] of currentRoom.exits.entries()) {
+      const targetRoomId = (typeof exit === 'object')
+        ? this.world.getGlobalId(exit.room, exit.area)
+        : this.world.getGlobalId(exit, currentRoom.area);
+
+      const targetRoom = this.world.rooms.get(targetRoomId);
+      if (!targetRoom) continue;
+
+      const hostilesInRoom = new Map();
+      targetRoom.npcs.forEach(localNpcId => {
+        const npc = this.getNpc(localNpcId, targetRoom.area);
+        if (npc && npc.isAlive() && npc.type === 'hostile') {
+          hostilesInRoom.set(npc.name, (hostilesInRoom.get(npc.name) || 0) + 1);
+        }
+      });
+
+      if (hostilesInRoom.size > 0) {
+        hostilesByDirection.push({
+          direction,
+          hostiles: Array.from(hostilesInRoom.entries()).map(([name, count]) => ({ name, count }))
+        });
+      }
+    }
+
+    return hostilesByDirection;
+  }
+
   // Вспомогательные методы
 
   /**
