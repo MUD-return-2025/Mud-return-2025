@@ -35,7 +35,7 @@ src/
 │   └── icons/                 # Vue иконки (стандартные)
 ├── game/
 │   ├── classes/
-│   │   ├── CommandParser.js   # Парсер игровых команд
+│   │   ├── CommandManager.js   # Парсер игровых команд
 │   │   ├── NPC.js            # Класс НПС и монстров
 │   │   ├── Player.js         # Класс игрока
 │   │   └── Room.js           # Класс локации

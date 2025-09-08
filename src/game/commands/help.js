@@ -5,10 +5,10 @@ export default {
 
   /**
    * @param {import('../GameEngine').GameEngine} game
-   * @param {import('../classes/CommandParser').ParsedCommand} cmd
+   * @param {import('../classes/CommandManager').ParsedCommand} cmd
    * @returns {string}
    */
   execute(game, cmd) {
-    return game.commandParser.generateHelp();
+    return game.commandManager.generateHelp();
   }
 };

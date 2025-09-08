@@ -110,6 +110,38 @@ export class WorldManager {
   }
 
   /**
+   * Перемещает блуждающего NPC в случайном направлении.
+   * @param {string} globalNpcId - Глобальный ID NPC.
+   * @param {string} currentRoomId - Текущий ID комнаты NPC.
+   * @returns {string|null} Сообщение о перемещении или null.
+   */
+  wanderNpc(globalNpcId, currentRoomId) {
+    const npc = this.npcs.get(globalNpcId);
+    const currentRoom = this.rooms.get(currentRoomId);
+
+    if (!npc || !currentRoom) return null;
+
+    const exits = currentRoom.getExits();
+    if (exits.length === 0) return null;
+
+    const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
+    const exit = currentRoom.getExit(randomExitDirection);
+
+    // Перемещаемся только внутри текущей зоны для простоты
+    if (typeof exit === 'string') {
+      const targetRoomId = this.getGlobalId(exit, currentRoom.area);
+      const targetRoom = this.rooms.get(targetRoomId);
+      currentRoom.removeNpc(npc.id);
+      targetRoom.addNpc(npc.id);
+      this.npcLocationMap.set(globalNpcId, targetRoomId);
+
+      if (this.game.player.currentRoom === currentRoomId) return this.game.colorize(`${npc.name} уходит в сторону (${randomExitDirection}).`, 'npc-neutral');
+      if (this.game.player.currentRoom === targetRoomId) return this.game.colorize(`${npc.name} приходит откуда-то.`, 'npc-neutral');
+    }
+    return null;
+  }
+
+  /**
    * Получает предмет по ID
    * @param {string} localId - Локальный ID предмета
    * @param {string} areaId - ID зоны, в которой находится предмет

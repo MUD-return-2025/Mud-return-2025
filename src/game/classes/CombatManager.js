@@ -128,7 +128,7 @@ export class CombatManager {
       const deadNpcRoomId = this.player.currentRoom;
       this.game.getCurrentRoom().removeNpc(this.npc.id);
       this.game.world.npcLocationMap.delete(deadNpcGlobalId);
-      this.game.scheduleNpcRespawn(deadNpcGlobalId, deadNpcRoomId);
+      this.game.tickManager.scheduleNpcRespawn(deadNpcGlobalId, deadNpcRoomId);
 
       this.stop();
       return result;

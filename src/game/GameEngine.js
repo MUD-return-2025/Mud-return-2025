@@ -1,11 +1,11 @@
 
 import { Player } from './classes/Player.js';
-import { Room } from './classes/Room.js';
 import { WorldManager } from './classes/WorldManager.js';
-import { NPC } from './classes/NPC.js';
 import { CombatManager } from './classes/CombatManager.js';
-import { CommandParser } from './classes/CommandParser.js';
+import { CommandManager } from './classes/CommandManager.js';
 import { DamageParser } from './utils/damageParser.js';
+import { TickManager } from './classes/TickManager.js';
+import { ActionGenerator } from './classes/ActionGenerator.js';
 import commands from './commands/index.js';
 
 /**
@@ -24,14 +24,15 @@ export class GameEngine {
   constructor() {
     this.player = new Player();
     this.world = new WorldManager(this);
-    this.commandParser = new CommandParser();
+    this.commandManager = new CommandManager(this);
+    this.tickManager = new TickManager(this);
+    this.actionGenerator = new ActionGenerator(this);
 
     this.skillsData = new Map(); // Карта умений, ключ - ID умения
 
     this.messageHistory = []; // История сообщений для вывода в терминал
     this.gameState = 'menu'; // Состояние игры: menu, playing, paused
     this.combatManager = null; // Менеджер текущего боя
-    this.respawnQueue = []; // Очередь для возрождения НПС    
     this.onMessage = null; // Колбэк для отправки асинхронных сообщений (бой и т.д.)
 
     this._loadCommands();
@@ -70,7 +71,7 @@ export class GameEngine {
    */
   _loadCommands() {
     for (const command of commands) {
-      this.commandParser.registerCommand(
+      this.commandManager.register(
         command.name,
         command.execute,
         command.description,
@@ -79,7 +80,7 @@ export class GameEngine {
       // Регистрируем специальные алиасы (например, 'север' -> 'go север')
       if (command.shortcuts) {
         for (const [shortcut, target] of Object.entries(command.shortcuts)) {
-          this.commandParser.aliases.set(shortcut, `${command.name} ${target}`);
+          this.commandManager.registerAlias(shortcut, `${command.name} ${target}`);
         }
       }
     }
@@ -91,19 +92,7 @@ export class GameEngine {
    * @returns {string} результат выполнения
    */
   async processCommand(input) {
-    const parsed = this.commandParser.parseCommand(input);
-    // Если игрок мертв, разрешаем только команду 'respawn'
-    if (this.player.state === 'dead' && parsed.command !== 'respawn') {
-      return 'Вы мертвы. Используйте команду "respawn" для возрождения.';
-    }
-
-    // Проверка на доступные команды во время боя
-    const allowedCombatCommands = ['flee', 'look', 'inventory', 'stats', 'use', 'kick'];
-    if (this.combatManager && !allowedCombatCommands.includes(parsed.command)) {
-      return 'Вы не можете сделать это в бою! Попробуйте `flee` (сбежать).';
-    }
-
-    const result = await this.commandParser.executeCommand(parsed, this);
+    const result = await this.commandManager.execute(input);
     
     // Добавляем команду и результат в историю
     this.messageHistory.push(`> ${input}`);
@@ -124,128 +113,8 @@ export class GameEngine {
    * @returns {string[]} Массив сообщений, сгенерированных за один тик.
    */
   tick() {
-    const messages = this.checkRespawns();
-    const cooldownMessages = this._tickCooldowns();
-    const wanderMessages = this.updateWanderingNpcs();
-    return [...messages, ...cooldownMessages, ...wanderMessages];
-  }
-
-  /**
-   * Проверяет очередь возрождения и возрождает НПС, если пришло время.
-   * @returns {string[]} Массив сообщений о возрождении.
-   */
-  checkRespawns() {
-    const messages = [];
-    const now = Date.now();
-
-    this.respawnQueue = this.respawnQueue.filter(entry => {
-      if (now >= entry.respawnTime) {
-        const [areaId, npcId] = this.world.parseGlobalId(entry.globalNpcId);
-        const npc = this.getNpc(npcId, areaId);
-        const room = this.world.rooms.get(entry.roomId); // entry.roomId - это globalRoomId
-        // Возрождаем, только если НПС еще не в комнате
-        if (npc && room && !room.hasNpc(npcId)) {
-          this.world.npcLocationMap.set(entry.globalNpcId, entry.roomId);
-          npc.respawn(this);
-          room.addNpc(npc.id); // Используем локальный ID
-          if (this.player.currentRoom === entry.roomId) {
-              // Если игрок в комнате, сообщаем ему о возрождении
-              messages.push(this.colorize(`${npc.name} появляется из тени!`, 'combat-npc-death'));
-          }
-        }
-        return false; // Удаляем из очереди
-      }
-      return true; // Оставляем в очереди
-    });
-
-    return messages;
-  }
-
-  /**
-   * Уменьшает время перезарядки умений игрока на 1 каждую секунду.
-   * @private
-   * @returns {string[]} Массив сообщений о готовности умений.
-   */
-  _tickCooldowns() {
-    const messages = [];
-    for (const skillId in this.player.skillCooldowns) {
-      if (this.player.skillCooldowns[skillId] > 0) {
-        this.player.skillCooldowns[skillId]--;
-        if (this.player.skillCooldowns[skillId] === 0) {
-          delete this.player.skillCooldowns[skillId];
-          const skillData = this.skillsData.get(skillId);
-          if (skillData) {
-            // Сообщение отправляется через emit, чтобы появиться в терминале
-            if (this.onMessage) this.onMessage(this.colorize(`Умение "${skillData.name}" готово к использоварованию.`, 'combat-exp-gain'));
-          }
-        }
-      }
-    }
-    return messages; // Возвращаем пустой массив, т.к. сообщения идут через emit
-  }
-
-  /**
-   * Обновляет положение блуждающих НПС.
-   * @returns {string[]} Массив сообщений о перемещении NPC.
-   */
-  updateWanderingNpcs() {
-    const messages = [];
-    const WANDER_CHANCE = 0.05; // 5% шанс в секунду на перемещение
-    const combatNpcGlobalId = this.combatManager
-      ? this.world.getGlobalId(this.combatManager.npc.id, this.combatManager.npc.area)
-      : null;
-    for (const [globalNpcId, currentNpcRoomId] of this.world.npcLocationMap.entries()) {
-      const npc = this.world.npcs.get(globalNpcId);
-      // Проверяем, может ли NPC перемещаться и не находится ли он в бою
-      if (npc && npc.canWander && npc.isAlive() && globalNpcId !== combatNpcGlobalId && Math.random() < WANDER_CHANCE) {
-        const currentNpcRoom = this.world.rooms.get(currentNpcRoomId);
-
-        if (currentNpcRoom) {
-          const exits = currentNpcRoom.getExits();
-          if (exits.length > 0) {
-            const randomExitDirection = exits[Math.floor(Math.random() * exits.length)];
-            const exit = currentNpcRoom.getExit(randomExitDirection);
-
-            // Перемещаемся только внутри текущей зоны для простоты
-            if (typeof exit === 'string') {
-              const targetRoomId = this.world.getGlobalId(exit, currentNpcRoom.area);
-              const targetRoom = this.world.rooms.get(targetRoomId);
-              currentNpcRoom.removeNpc(npc.id);
-              targetRoom.addNpc(npc.id);
-              this.world.npcLocationMap.set(globalNpcId, targetRoomId); // Обновляем карту
-
-              // Если игрок в одной из комнат, оповещаем его
-              if (this.player.currentRoom === currentNpcRoomId) {
-                messages.push(this.colorize(`${npc.name} уходит в сторону (${randomExitDirection}).`, 'npc-neutral'));
-              } else if (this.player.currentRoom === targetRoomId) {
-                messages.push(this.colorize(`${npc.name} приходит откуда-то.`, 'npc-neutral'));
-              }
-            }
-          }
-        }
-      }
-    }
-    return messages;
-  }
-
-  /**
-   * Планирует возрождение НПС.
-   * @param {string} globalNpcId - Глобальный ID НПС для возрождения.
-   * @param {string} roomId - ID комнаты, где НПС должен возродиться.
-   */
-  scheduleNpcRespawn(globalNpcId, roomId) {
-    const npc = this.world.npcs.get(globalNpcId);
-    // Возрождаем только враждебных НПС (например, крыс)
-    if (!npc || npc.type !== 'hostile') {
-      return;
-    }
-
-    const RESPAWN_TIME = 30000; // 30 секунд
-    this.respawnQueue.push({
-      globalNpcId,
-      roomId,
-      respawnTime: Date.now() + RESPAWN_TIME
-    });
+    // Делегируем логику тика в TickManager
+    return this.tickManager.tick();
   }
 
   /**
@@ -331,7 +200,7 @@ export class GameEngine {
    * @private
    */
   _getConsiderItemString(item) {
-    let result = `Вы рассматриваете ${this.colorize(item.name, 'item-name')}.\n`;
+    let result = `Вы рассматриваете ${this.colorize(item.name, 'item-name')}.\n`; // Этот метод тоже можно вынести
     result += `${item.description}\n\n`;
     result += `Характеристики:\n`;
     if (item.type) result += `  Тип: ${item.type}\n`;
@@ -518,7 +387,7 @@ export class GameEngine {
     if (this.combatManager) {
       this.combatManager.stop();
     }
-    this.respawnQueue = [];
+    this.tickManager.reset();
   }
   /**
    * Сохранение игры в localStorage
@@ -732,67 +601,7 @@ ${this.getCurrentRoom().getFullDescription(this)}
    * }>}
    */
   getAvailableActions() {
-    const groupedActions = [];
-    const currentRoom = this.getCurrentRoom();
-    if (!currentRoom) return [];
-
-    // --- Группа: Базовые действия ---
-    const baseActions = [
-      { label: '👁️ Осмотреться', command: 'look' },
-      { label: '💾 Сохранить', command: 'save' },
-      { label: '❓ Помощь', command: 'help' }
-    ];
-    groupedActions.push({ isGeneral: true, actions: baseActions });
-
-    // --- Действия, которые не привязаны к конкретному NPC, но зависят от их наличия ---
-    const generalNpcActions = [];
-    const npcsInRoom = currentRoom.npcs
-      .map(npcId => this.getNpc(npcId, currentRoom.area))
-      .filter(npc => npc && npc.isAlive());
-
-    if (npcsInRoom.some(npc => npc.canTrade && npc.canTrade())) {
-      generalNpcActions.push({ label: '💰 Торговать', command: 'list' });
-    }
-    if (npcsInRoom.some(npc => npc.canHeal)) {
-      generalNpcActions.push({ label: '✨ Исцелиться', command: 'heal' });
-    }
-    if (generalNpcActions.length > 0) {
-      groupedActions.push({ isGeneral: true, actions: generalNpcActions });
-    }
-
-    // --- Группировка действий по каждому предмету ---
-    currentRoom.items
-      .map(globalItemId => this.world.items.get(globalItemId))
-      .filter(Boolean)
-      .forEach(item => {
-        groupedActions.push({
-          target: { name: item.name, type: 'item-name' },
-          actions: [
-            { label: `👁️ Осмотреть`, command: `look ${item.name}` },
-            { label: `🤔 Оценить`, command: `consider ${item.name}` },
-            { label: `✋ Взять`, command: `get ${item.name}` }
-          ]
-        });
-      });
-
-    // --- Группировка действий по каждому NPC ---
-    for (const npc of npcsInRoom) {
-      const specificNpcActions = [];
-      specificNpcActions.push({ label: `👁️ Осмотреть`, command: `look ${npc.name}` });
-      specificNpcActions.push({ label: `🤔 Оценить`, command: `consider ${npc.name}` });
-      if (npc.dialogue && npc.dialogue.length > 0) {
-        specificNpcActions.push({ label: `💬 Поговорить`, command: `talk ${npc.name}` });
-      }
-      if (npc.type === 'hostile') {
-        specificNpcActions.push({ label: `⚔️ Убить`, command: `kill ${npc.name}`, danger: true });
-      }
-      groupedActions.push({
-        target: { name: npc.name, type: `npc-${npc.type}` },
-        actions: specificNpcActions
-      });
-    }
-
-    return groupedActions;
+    return this.actionGenerator.getAvailableActions();
   }
 
   /**
@@ -808,7 +617,7 @@ ${this.getCurrentRoom().getFullDescription(this)}
 
     if (!command) {
       // Если команда не введена, предлагаем базовые команды
-      const allCommands = [...this.commandParser.commands.keys()];
+      const allCommands = [...this.commandManager.commands.keys()];
       return allCommands
         .filter(cmd => cmd.startsWith(lowerPrefix))
         .map(cmd => ({ text: cmd, type: 'command' }));

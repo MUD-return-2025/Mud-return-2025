@@ -18,7 +18,7 @@ class GameEngine {
   - player: Player
   - rooms: Map<string, Room>
   - npcs: Map<string, NPC>
-  - commandParser: CommandParser
+  - commandParser: CommandManager
   - combatTarget: NPC | null
   - messageHistory: Array<string>
   - gameState: string
@@ -61,9 +61,9 @@ class Room {
 }
 ```
 
-#### 4. CommandParser (Парсер команд)
+#### 4. CommandManager (Парсер команд)
 ```javascript
-class CommandParser {
+class CommandManager {
   - commands: Map<string, Function>
   
   + parseCommand(input: string): Command
@@ -76,7 +76,7 @@ class CommandParser {
 
 1. **Пользователь вводит команду** → GameInput.vue
 2. **GameTerminal.vue вызывает `gameEngine.processCommand()`**
-3. **GameEngine использует CommandParser** для разбора и выполнения команды
+3. **GameEngine использует CommandManager** для разбора и выполнения команды
 4. **Команда изменяет состояние** (объекты Player, Room, NPC) внутри GameEngine
 5. **GameTerminal.vue обновляет реактивный объект `player`**, что вызывает перерисовку UI (включая PlayerStatsPanel)
 

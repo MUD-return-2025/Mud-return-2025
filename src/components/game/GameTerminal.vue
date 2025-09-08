@@ -85,21 +85,27 @@ const toggleFullscreen = () => {
  * Осуществляет навигацию по списку подсказок или истории команд.
  */
 const navigateSuggestionsUp = () => {
+  // Приоритет у подсказок
   if (suggestions.value.length > 0) {
-    // Корректная навигация вверх по подсказкам
     activeSuggestionIndex.value = activeSuggestionIndex.value <= 0
       ? suggestions.value.length - 1
       : activeSuggestionIndex.value - 1;
   } else {
+    // Если подсказок нет, навигируемся по истории
     navigateHistory('up');
   }
 };
 
 const navigateSuggestionsDown = () => {
+  // Приоритет у подсказок
   if (suggestions.value.length > 0) {
-    // Корректная навигация вниз по подсказкам
-    activeSuggestionIndex.value = (activeSuggestionIndex.value + 1) % suggestions.value.length;
+    if (activeSuggestionIndex.value < suggestions.value.length - 1) {
+      activeSuggestionIndex.value++;
+    } else {
+      activeSuggestionIndex.value = 0;
+    }
   } else {
+    // Если подсказок нет, навигируемся по истории
     navigateHistory('down');
   }
 };
