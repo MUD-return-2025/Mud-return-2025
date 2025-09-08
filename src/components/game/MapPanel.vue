@@ -93,8 +93,35 @@ const isRoomClickable = (localRoomId) => {
  */
 const moveToRoom = async (localRoomId) => {
   if (!isRoomClickable(localRoomId)) return;
-  const globalRoomId = gameStore.engine.world.getGlobalId(localRoomId, currentAreaId.value);
-  await gameStore.moveToRoom(globalRoomId);
+
+  const globalTargetRoomId = gameStore.engine.world.getGlobalId(localRoomId, currentAreaId.value);
+
+  // Находим направление, которое ведет в целевую комнату, чтобы сформировать команду
+  let direction = null;
+  const currentRoom = gameStore.currentRoom;
+
+  if (currentRoom && currentRoom.exits) {
+    for (const [dir, exitData] of currentRoom.exits.entries()) {
+      const exitGlobalId = (typeof exitData === 'object')
+        ? gameStore.engine.world.getGlobalId(exitData.room, exitData.area)
+        : gameStore.engine.world.getGlobalId(exitData, currentRoom.area);
+
+      if (exitGlobalId === globalTargetRoomId) {
+        direction = dir;
+        break;
+      }
+    }
+  }
+
+  // Если нашли направление, выполняем команду "go", чтобы она отобразилась в терминале
+  if (direction) {
+    await gameStore.processCommand(`go ${direction}`);
+  } else {
+    // Этого не должно произойти, если isRoomClickable работает правильно,
+    // но оставляем как запасной вариант прямого перемещения.
+    console.warn(`Could not find direction for room ${globalTargetRoomId}. Moving directly.`);
+    await gameStore.moveToRoom(globalTargetRoomId);
+  }
 };
 </script>
 

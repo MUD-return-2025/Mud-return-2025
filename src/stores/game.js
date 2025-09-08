@@ -105,6 +105,7 @@ export const useGameStore = defineStore('game', () => {
   async function processCommand(input) {
     if (!input) return;
 
+    _addMessages('\n ');
     _addMessages(engine.colorize(`> ${input}`, 'user-input'));
 
     if (!gameStarted.value) {
