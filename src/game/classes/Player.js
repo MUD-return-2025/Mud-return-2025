@@ -38,6 +38,7 @@ export class Player {
     this.equippedWeapon = null;
     this.equippedArmor = null;
     this.skills = []; // Используем массив вместо Set
+    this.gold = 100; // Стартовое золото
     this.skillCooldowns = {};
     this.nextAttackIsSkill = null;
     this.skillUsedThisRound = false;
@@ -176,6 +177,7 @@ export class Player {
     // Сначала применяем все данные из сохранения
     Object.assign(this, data);
 
+    this.gold = data.gold || 0;
     // Затем убеждаемся, что новые или отсутствующие в сохранении поля
     // имеют значения по умолчанию, чтобы избежать NaN и undefined.
     this.stamina = data.stamina ?? this.maxStamina ?? 100;

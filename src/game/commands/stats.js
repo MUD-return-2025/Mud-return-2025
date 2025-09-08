@@ -49,6 +49,8 @@ export default {
       `  🔮 ${c('Мудрость:'.padEnd(13), 'item-name')} ${p.wisdom}`,
       `  😊 ${c('Харизма:'.padEnd(13), 'item-name')} ${p.charisma}`,
       ``,
+      `  💰 ${c('Золото:'.padEnd(14), 'item-name')} ${p.gold}`,
+      ``,
       `  Состояние: ${stateText}`
     ];
 

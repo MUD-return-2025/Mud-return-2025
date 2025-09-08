@@ -25,7 +25,8 @@ export default {
       result += '\n';
     });
 
-    result += `\nОбщий вес: ${totalWeight}/${game.player.strength * 10}`;
+    result += `\nОбщий вес: ${totalWeight}/${game.player.strength * 10}\n`;
+    result += `У вас ${game.colorize(game.player.gold, 'exit-name')} золота.`;
     return result;
   }
 };

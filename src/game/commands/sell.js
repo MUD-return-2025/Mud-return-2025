@@ -30,8 +30,9 @@ export default {
 
     game.player.removeItem(item.globalId);
 
-    const sellPrice = Math.floor((item.value || 10) / 2);
-    // В будущей реализации здесь будет добавлено золото игроку
-    return `${game.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Спасибо за ${game.colorize(item.name, 'item-name')}! Вот вам ${sellPrice} золота." (В этой версии золото пока не реализовано)`;
+    const sellPrice = Math.floor((item.value || 0) / 2);
+    game.player.gold += sellPrice;
+
+    return `${game.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Спасибо за ${game.colorize(item.name, 'item-name')}! Вот вам ${sellPrice} золота."`;
   }
 };

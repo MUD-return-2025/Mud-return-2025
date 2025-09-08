@@ -469,6 +469,7 @@ export class GameEngine {
         wisdom: this.player.wisdom,
         charisma: this.player.charisma,
         inventory: this.player.inventory,
+        gold: this.player.gold,
         currentRoom: this.player.currentRoom,
         state: this.player.state,
         equippedWeapon: this.player.equippedWeapon,

@@ -29,16 +29,23 @@ export default {
       return `${game.colorize(npc.name, `npc-name npc-${npc.type}`)} говорит: "У меня нет такого товара."`;
     }
 
+    const itemPrice = itemToBuy.value || 0;
+
+    if (game.player.gold < itemPrice) {
+      return `${game.colorize(npc.name, 'npc-name npc-friendly')} говорит: "У вас недостаточно золота. Этот товар стоит ${itemPrice}."`;
+    }
+
     // Создаем новый экземпляр предмета, чтобы не было проблем с мутацией оригинала
     const item = { ...itemToBuy, globalId: game.world.getGlobalId(itemToBuy.id, itemToBuy.area) };
 
     // Проверяем, может ли игрок нести предмет
     if (!game.player.canCarry(item)) {
-      return `${game.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Этот товар слишком тяжел для вас."`;
+      return `${game.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Этот товар слишком тяжел для вас. Освободите место в инвентаре."`;
     }
 
-    // В упрощенной версии покупка бесплатная
+    // Покупка за золото
+    game.player.gold -= itemPrice;
     game.player.addItem(item);
-    return `${game.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Вот ваш ${game.colorize(item.name, 'item-name')}. Пользуйтесь на здоровье!"`;
+    return `${game.colorize(npc.name, 'npc-name npc-friendly')} говорит: "Вот ваш ${game.colorize(item.name, 'item-name')}. Пользуйтесь на здоровье!" Вы заплатили ${itemPrice} золота.`;
   }
 };
