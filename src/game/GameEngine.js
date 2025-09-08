@@ -200,24 +200,34 @@ export class GameEngine {
    * @private
    */
   _getConsiderItemString(item) {
-    let result = `Вы рассматриваете ${this.colorize(item.name, 'item-name')}.\n`; // Этот метод тоже можно вынести
-    result += `${item.description}\n\n`;
-    result += `Характеристики:\n`;
-    if (item.type) result += `  Тип: ${item.type}\n`;
-    if (item.damage) result += `  Урон: ${item.damage}\n`;
-    if (item.armor) result += `  Защита: ${item.armor}\n`;
-    if (item.healAmount) result += `  Лечение: ${item.healAmount}\n`;
-    if (item.weight) result += `  Вес: ${item.weight}\n`;
-    if (item.value) result += `  Ценность: ${item.value} золота\n`;
+    const c = this.colorize;
+    const header = c(`---[ Оценка: ${item.name} ]--------`, 'room-name');
+    const footer = c('------------------------------------', 'room-name');
 
+    const lines = [
+      c(item.description, 'npc-neutral'),
+      '',
+      c('Характеристики:', 'exit-name')
+    ];
+
+    if (item.type) lines.push(`  Тип: ${c(item.type, 'item-name')}`);
+    if (item.damage) lines.push(`  ⚔️ Урон: ${c(item.damage, 'combat-player-attack')}`);
+    if (item.armor) lines.push(`  🛡️ Защита: ${c(item.armor, 'combat-exp-gain')}`);
+    if (item.healAmount) lines.push(`  ❤️ Лечение: ${c(item.healAmount, 'combat-exp-gain')}`);
+    if (item.weight) lines.push(`  ⚖️ Вес: ${c(item.weight, 'npc-neutral')}`);
+    if (item.value) lines.push(`  💰 Ценность: ${c(item.value, 'exit-name')} золота`);
+
+    let result = [header, ...lines].join('\n');
+    
     // Логика сравнения
     if (item.type === 'weapon') {
       result += this._compareEquipment(item, this.player.equippedWeapon, 'Оружие');
     } else if (item.type === 'armor') {
       result += this._compareEquipment(item, this.player.equippedArmor, 'Броня');
     }
-
-    return result.trim();
+    
+    result += `\n${footer}`;
+    return result;
   }
 
   /**
@@ -229,11 +239,12 @@ export class GameEngine {
    * @private
    */
   _compareEquipment(newItem, equippedItem, itemTypeName) {
+    const c = this.colorize;
     if (!equippedItem) {
-      return `\nУ вас не надето: ${itemTypeName}.`;
+      return `\n\n${c('Сравнение:', 'exit-name')}\n  У вас не надето: ${itemTypeName}.`;
     }
 
-    let comparison = `\nСравнение с надетым (${this.colorize(equippedItem.name, 'item-name')}):\n`;
+    let comparison = `\n\n${c('Сравнение с надетым', 'exit-name')} (${c(equippedItem.name, 'item-name')}):\n`;
     let better = 0;
     let worse = 0;
     
@@ -246,10 +257,10 @@ export class GameEngine {
 
       if (isBetter) {
         better++;
-        return `  ${name}: ${newItemStat.toFixed(1)} (${this.colorize(diffStr, 'combat-exp-gain')})\n`;
+        return `  ${name}: ${newItemStat.toFixed(1)} (${c(diffStr, 'combat-exp-gain')})\n`;
       } else {
         worse++;
-        return `  ${name}: ${newItemStat.toFixed(1)} (${this.colorize(diffStr, 'combat-npc-death')})\n`;
+        return `  ${name}: ${newItemStat.toFixed(1)} (${c(diffStr, 'combat-npc-death')})\n`;
       }
     };
 
@@ -257,21 +268,21 @@ export class GameEngine {
       const newItemDamage = new DamageParser(newItem.damage).avg();
       const equippedItemDamage = new DamageParser(equippedItem.damage).avg();
       comparison += compareStat('Средний урон', newItemDamage, equippedItemDamage);
-    }
-    
+    }    
     if (newItem.type === 'armor') {
       comparison += compareStat('Защита', newItem.armor || 0, equippedItem.armor || 0);
     }
 
     comparison += compareStat('Вес', newItem.weight || 0, equippedItem.weight || 0, true);
-    comparison += compareStat('Ценность', newItem.value || 0, equippedItem.value || 0);
+    // Сравнение ценности не так важно, уберем его из общего вердикта
+    comparison += `  Ценность: ${newItem.value || 0} (=)\n`;
 
     if (better > worse) {
-      comparison += `\nВ целом, это ${this.colorize('лучше', 'combat-exp-gain')}, чем то, что на вас надето.`;
+      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c('лучше', 'combat-exp-gain')}, чем то, что на вас надето.`;
     } else if (worse > better) {
-      comparison += `\nВ целом, это ${this.colorize('хуже', 'combat-npc-death')}, чем то, что на вас надето.`;
+      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c('хуже', 'combat-npc-death')}, чем то, что на вас надето.`;
     } else {
-      comparison += `\nВ целом, они примерно одинаковы.`;
+      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, они примерно одинаковы.`;
     }
 
     return comparison;
@@ -284,43 +295,56 @@ export class GameEngine {
    * @private
    */
   _getConsiderNpcString(npc) {
-    let result = `Вы оцениваете ${this.colorize(npc.name, `npc-name npc-${npc.type}`)}.\n`;
-    result += `${npc.description}\n\n`;
+    const c = this.colorize;
+    const header = c(`---[ Оценка: ${npc.name} ]--------`, 'room-name');
+    const footer = c('------------------------------------', 'room-name');
+
+    const lines = [
+      c(npc.description, 'npc-neutral'),
+      '',
+      c('Оценка сил:', 'exit-name')
+    ];
 
     const playerHp = this.player.hitPoints;
     const playerAvgDamage = this._calculateAvgPlayerDamage();
-    
     const npcHp = npc.hitPoints;
     const npcAvgDamage = new DamageParser(npc.damage).avg();
 
     // Избегаем деления на ноль
     if (playerAvgDamage <= 0) {
-        return result + `Оценка сил: Вы не можете нанести урон.`;
+      lines.push('  Вы не можете нанести урон.');
+      return [header, ...lines, footer].join('\n');
     }
     if (npcAvgDamage <= 0) {
-        return result + `Оценка сил: Противник не может нанести урон. Легкая победа.`;
+      lines.push(`  Противник не может нанести урон. ${c('Легкая победа', 'combat-exp-gain')}.`);
+      return [header, ...lines, footer].join('\n');
     }
 
     const roundsToKillNpc = Math.ceil(npcHp / playerAvgDamage);
     const roundsToKillPlayer = Math.ceil(playerHp / npcAvgDamage);
 
+    lines.push(`  Ваш урон/раунд (средний): ${c(playerAvgDamage.toFixed(1), 'combat-player-attack')}`);
+    lines.push(`  Урон врага/раунд (средний): ${c(npcAvgDamage.toFixed(1), 'combat-npc-attack')}`);
+    lines.push(`  Раундов до победы: ~${c(roundsToKillNpc, 'combat-player-attack')}`);
+    lines.push(`  Раундов до поражения: ~${c(roundsToKillPlayer, 'combat-npc-attack')}`);
+
     let conclusion = '';
+    let conclusionColor = 'npc-neutral';
     const ratio = roundsToKillPlayer / roundsToKillNpc;
 
     if (ratio > 2.5) {
-      conclusion = 'Это будет легкая победа.';
+      conclusion = 'Легкая победа.'; conclusionColor = 'combat-exp-gain';
     } else if (ratio > 1.5) {
-      conclusion = 'Вы, скорее всего, победите, но можете получить урон.';
+      conclusion = 'Скорее всего, вы победите.'; conclusionColor = 'exit-name';
     } else if (ratio >= 0.9) {
-      conclusion = 'Бой будет очень тяжелым. Шансы примерно равны.';
+      conclusion = 'Тяжелый бой, шансы равны.'; conclusionColor = 'combat-player-attack';
     } else if (ratio > 0.6) {
-      conclusion = 'Это очень опасный противник. Скорее всего, вы проиграете.';
+      conclusion = 'Очень опасно, скорее всего, вы проиграете.'; conclusionColor = 'combat-npc-attack';
     } else {
-      conclusion = 'Бегите! У вас нет шансов.';
+      conclusion = 'Бегите! У вас нет шансов.'; conclusionColor = 'combat-player-death';
     }
-
-    result += `Оценка сил: ${this.colorize(conclusion, 'combat-player-attack')}`;
-    return result;
+    lines.push(`\n${c('Вердикт:', 'exit-name')} ${c(conclusion, conclusionColor)}`);
+    return [header, ...lines, footer].join('\n');
   }
 
   /**
