@@ -1,6 +1,6 @@
 <template>
   <div class="game-terminal" :class="{ fullscreen: isFullscreen }">
-    <div class="terminal-output" ref="outputElement" @click="refocusInput">
+    <div class="terminal-output" ref="outputElement" @click="handleOutputClick">
       <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'">
         {{ isFullscreen ? '⤡' : '⛶' }}
       </button>
@@ -39,7 +39,9 @@
         />
       </div>
 
-      <PlayerStatsPanel />
+      <div class="side-panels">
+        <PlayerStatsPanel @action-performed="refocusInput" />
+      </div>
     </div>
   </div>
 </template>
@@ -48,6 +50,7 @@
 import { ref, onMounted, nextTick, watch } from 'vue';
 import { useGameStore } from '../../stores/game.js';
 import PlayerStatsPanel from './PlayerStatsPanel.vue';
+import MapPanel from './MapPanel.vue';
 
 /** @type {import('vue').Ref<string>} Текущий текст в поле ввода. */
 const currentInput = ref('');
@@ -71,6 +74,16 @@ const isInitialized = ref(false);
 const activeSuggestionIndex = ref(-1);
 
 const gameStore = useGameStore();
+
+/**
+ * Обрабатывает клик по области вывода.
+ * Возвращает фокус, только если нет выделенного текста.
+ */
+const handleOutputClick = () => {
+  if (window.getSelection().toString().length === 0) {
+    refocusInput();
+  }
+};
 
 /**
  * Возвращает фокус на поле ввода.
@@ -250,6 +263,11 @@ onMounted(async () => {
 
 .input-container {
   position: relative;
+}
+
+.side-panels {
+  display: flex;
+  flex-direction: column;
 }
 
 .game-terminal.fullscreen .terminal-output {

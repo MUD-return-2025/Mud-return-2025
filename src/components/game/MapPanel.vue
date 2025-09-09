@@ -1,7 +1,10 @@
 <script setup>
-import { computed } from 'vue';
+import { computed, defineEmits } from 'vue';
 import { useGameStore } from '../../stores/game.js';
 const gameStore = useGameStore();
+
+// Определяем событие, которое компонент может генерировать
+const emit = defineEmits(['action-performed']);
 
 /**
  * @description Вычисляемые свойства для определения текущей зоны и комнаты.
@@ -122,6 +125,9 @@ const moveToRoom = async (localRoomId) => {
     console.warn(`Could not find direction for room ${globalTargetRoomId}. Moving directly.`);
     await gameStore.moveToRoom(globalTargetRoomId);
   }
+
+  // Сообщаем родительскому компоненту, что действие выполнено, чтобы он мог вернуть фокус
+  emit('action-performed');
 };
 </script>
 
@@ -159,7 +165,7 @@ const moveToRoom = async (localRoomId) => {
         <button 
           v-for="exit in interZoneExits" 
           :key="exit.direction"
-          @click="gameStore.processCommand('go ' + exit.direction)"
+          @click="gameStore.processCommand('go ' + exit.direction); emit('action-performed')"
         >
           {{ exit.direction }} (в {{ exit.targetAreaName }})
         </button>

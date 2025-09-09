@@ -1,6 +1,6 @@
 <script setup>
 // Компонент Vue для отображения панели статистики игрока, инвентаря, экипировки и карты.
-import { ref, watch } from 'vue';
+import { ref, watch, defineEmits } from 'vue';
 import { useGameStore } from '../../stores/game.js';
 import EquipmentPanel from './EquipmentPanel.vue';
 import InventoryPanel from './InventoryPanel.vue';
@@ -9,6 +9,9 @@ import MapPanel from './MapPanel.vue';
 import RadarPanel from './RadarPanel.vue';
 
 const gameStore = useGameStore();
+
+// Определяем событие, которое компонент может генерировать
+const emit = defineEmits(['action-performed']);
 
 /**
  * Отслеживает изменение состояния игрока.
@@ -32,6 +35,15 @@ const tabs = [
   { id: 'equipment', name: 'Экипировка' },
   { id: 'map', name: 'Карта' }
 ];
+
+/**
+ * Обрабатывает команду и сообщает родительскому компоненту о выполненном действии.
+ * @param {string} command - Команда для выполнения.
+ */
+const handleCommand = (command) => {
+  gameStore.processCommand(command);
+  emit('action-performed');
+};
 
 /**
  * Переключает состояние панели (свернута/развернута).
@@ -131,7 +143,7 @@ const togglePanel = () => {
               <div class="skill-actions">
                 <button
                   :class="['action-btn', { 'is-on-cooldown': gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0 }]"
-                  @click="gameStore.processCommand(skill.id)"
+                  @click="handleCommand(skill.id)"
                   :disabled="gameStore.player.stamina < skill.cost || (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0)"
                   :title="gameStore.player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${gameStore.player.skillCooldowns[skill.id]}` : skill.description"
                 >
@@ -144,7 +156,7 @@ const togglePanel = () => {
                   v-for="npc in gameStore.hostileNpcsInRoom"
                   :key="npc.id"
                   :class="['action-btn', { 'is-on-cooldown': gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0 }]"
-                  @click="gameStore.processCommand(`${skill.id} ${npc.name}`)"
+                  @click="handleCommand(`${skill.id} ${npc.name}`)"
                   :disabled="gameStore.player.stamina < skill.cost || (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0)"
                   :title="gameStore.player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${gameStore.player.skillCooldowns[skill.id]}` : `Применить '${skill.name}' к ${npc.name}`"
                 >
@@ -162,7 +174,7 @@ const togglePanel = () => {
             <div class="quick-actions">
               <button
                 class="action-btn"
-                @click="gameStore.processCommand(`use ${gameStore.healingPotion.name}`)"
+                @click="handleCommand(`use ${gameStore.healingPotion.name}`)"
                 :disabled="gameStore.player.hitPoints >= gameStore.player.maxHitPoints"
                 :title="gameStore.player.hitPoints >= gameStore.player.maxHitPoints ? 'Вы полностью здоровы' : `Использовать ${gameStore.healingPotion.name}`"
               >
@@ -174,7 +186,7 @@ const togglePanel = () => {
           <div v-if="gameStore.player.state === 'fighting'" class="stat-group">
             <h4>⚔️ Действия в бою</h4>
             <div class="combat-actions">
-                <button class="action-btn danger" @click="gameStore.processCommand('flee')">
+                <button class="action-btn danger" @click="handleCommand('flee')">
                   Сбежать
                 </button>
             </div>
@@ -186,7 +198,7 @@ const togglePanel = () => {
           <InventoryPanel 
             :player="gameStore.player" 
             :game-engine="gameStore.engine"
-            @command="gameStore.processCommand($event)"
+            @command="handleCommand($event)"
           />
         </div>
 
@@ -194,17 +206,17 @@ const togglePanel = () => {
         <div v-if="activeTab === 'equipment'">
           <EquipmentPanel 
             :player="gameStore.player"
-            @command="gameStore.processCommand($event)"
+            @command="handleCommand($event)"
           />
         </div>
 
         <!-- Вкладка "Мини-карта" -->
         <div v-if="activeTab === 'map'" class="map-tab-content">
-          <MapPanel />
+          <MapPanel @action-performed="emit('action-performed')" />
 
           <ActionsPanel
             :grouped-actions="gameStore.groupedActions"
-            @command="gameStore.processCommand($event)"
+            @command="handleCommand($event)"
           />
 
         </div>
