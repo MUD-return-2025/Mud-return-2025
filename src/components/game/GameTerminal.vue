@@ -1,7 +1,7 @@
 <template>
   <div class="game-terminal" :class="{ fullscreen: isFullscreen }">
-    <div class="terminal-output" ref="outputElement">
-      <button @click="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'">
+    <div class="terminal-output" ref="outputElement" @click="refocusInput">
+      <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'">
         {{ isFullscreen ? '⤡' : '⛶' }}
       </button>
       <div v-if="!gameStore.gameStarted" class="welcome-message">
@@ -73,12 +73,19 @@ const activeSuggestionIndex = ref(-1);
 const gameStore = useGameStore();
 
 /**
+ * Возвращает фокус на поле ввода.
+ */
+const refocusInput = () => {
+  inputElement.value?.focus();
+};
+
+/**
  * Переключает полноэкранный режим терминала.
  */
 const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value;
   // Возвращаем фокус на поле ввода после изменения DOM
-  nextTick(() => inputElement.value?.focus());
+  nextTick(refocusInput);
 };
 
 /**
@@ -168,7 +175,7 @@ const applySuggestion = (suggestion) => {
   parts[parts.length - 1] = suggestion.text;
   currentInput.value = parts.join(' ');
   suggestions.value = []; // Скрываем подсказки
-  inputElement.value?.focus(); // Возвращаем фокус
+  refocusInput(); // Возвращаем фокус
 };
 
 /** Применяет активную (или первую) подсказку по нажатию Tab. */
@@ -204,11 +211,12 @@ const processCommand = async () => {
   await gameStore.processCommand(input);
 
   currentInput.value = '';
+  refocusInput();
 };
 
 onMounted(async () => {
   // Фокусируемся на поле ввода при загрузке компонента.
-  inputElement.value?.focus();
+  refocusInput();
   historyIndex.value = commandHistory.value.length;
 
   // Инициализируем хранилище и движок
@@ -253,6 +261,7 @@ onMounted(async () => {
   padding: 10px;
   overflow-y: auto;
   background-color: #001100;
+  cursor: default; /* Чтобы показать, что сюда можно кликать для фокуса */
   color: #00ff00;
   font-size: 14px;
   line-height: 1.4;
