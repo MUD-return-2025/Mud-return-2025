@@ -109,10 +109,7 @@ export class CommandManager {
    * @returns {Array<{text: string, type: string}>}
    */
   getCommandSuggestions(command, prefix = '') {
-    // Эта логика осталась в GameEngine, так как она сильно завязана на состояние мира.
-    // В идеале, ее тоже можно было бы перенести сюда, передавая нужные данные.
-    // Но для текущего рефакторинга оставим ее в движке.
-    return this.game.getCommandSuggestions(command, prefix);
+    return this.game.suggestionGenerator.getSuggestions(command, prefix);
   }
 
   /**

@@ -5,6 +5,8 @@ import { CombatManager } from './classes/CombatManager.js';
 import { CommandManager } from './classes/CommandManager.js';
 import { DamageParser } from './utils/damageParser.js';
 import { TickManager } from './classes/TickManager.js';
+import { ConsiderationManager } from './classes/ConsiderationManager.js';
+import { SuggestionGenerator } from './classes/SuggestionGenerator.js';
 import { ActionGenerator } from './classes/ActionGenerator.js';
 import commands from './commands/index.js';
 
@@ -26,6 +28,8 @@ export class GameEngine {
     this.world = new WorldManager(this);
     this.commandManager = new CommandManager(this);
     this.tickManager = new TickManager(this);
+    this.considerationManager = new ConsiderationManager(this);
+    this.suggestionGenerator = new SuggestionGenerator(this);
     this.actionGenerator = new ActionGenerator(this);
 
     this.skillsData = new Map(); // Карта умений, ключ - ID умения
@@ -194,40 +198,25 @@ export class GameEngine {
   }
 
   /**
-   * Формирует строку с описанием и сравнением предмета.
-   * @param {object} item - Предмет для оценки.
-   * @returns {string}
+   * Рассчитывает средний урон игрока.
+   * @returns {number}
    * @private
    */
-  _getConsiderItemString(item) {
-    const c = this.colorize;
-    const header = c(`---[ Оценка: ${item.name} ]--------`, 'room-name');
-    const footer = c('------------------------------------', 'room-name');
-
-    const lines = [
-      c(item.description, 'npc-neutral'),
-      '',
-      c('Характеристики:', 'exit-name')
-    ];
-
-    if (item.type) lines.push(`  Тип: ${c(item.type, 'item-name')}`);
-    if (item.damage) lines.push(`  ⚔️ Урон: ${c(item.damage, 'combat-player-attack')}`);
-    if (item.armor) lines.push(`  🛡️ Защита: ${c(item.armor, 'combat-exp-gain')}`);
-    if (item.healAmount) lines.push(`  ❤️ Лечение: ${c(item.healAmount, 'combat-exp-gain')}`);
-    if (item.weight) lines.push(`  ⚖️ Вес: ${c(item.weight, 'npc-neutral')}`);
-    if (item.value) lines.push(`  💰 Ценность: ${c(item.value, 'exit-name')} золота`);
-
-    let result = [header, ...lines].join('\n');
+  _calculateAvgPlayerDamage() {
+    // Базовый урон 1d6 без оружия
+    let avgDamage = 3.5;
     
-    // Логика сравнения
-    if (item.type === 'weapon') {
-      result += this._compareEquipment(item, this.player.equippedWeapon, 'Оружие');
-    } else if (item.type === 'armor') {
-      result += this._compareEquipment(item, this.player.equippedArmor, 'Броня');
+    // Бонус от силы
+    const strBonus = Math.floor((this.player.strength - 10) / 2);
+    
+    // Бонус от оружия
+    if (this.player.equippedWeapon && this.player.equippedWeapon.damage) {
+      avgDamage = new DamageParser(this.player.equippedWeapon.damage).avg() + strBonus;
+    } else {
+      avgDamage += strBonus;
     }
     
-    result += `\n${footer}`;
-    return result;
+    return Math.max(1, avgDamage);
   }
 
   /**
@@ -274,7 +263,6 @@ export class GameEngine {
     }
 
     comparison += compareStat('Вес', newItem.weight || 0, equippedItem.weight || 0, true);
-    // Сравнение ценности не так важно, уберем его из общего вердикта
     comparison += `  Ценность: ${newItem.value || 0} (=)\n`;
 
     if (better > worse) {
@@ -286,87 +274,6 @@ export class GameEngine {
     }
 
     return comparison;
-  }
-
-  /**
-   * Оценивает шансы на победу в бою с NPC.
-   * @param {NPC} npc - Противник.
-   * @returns {string}
-   * @private
-   */
-  _getConsiderNpcString(npc) {
-    const c = this.colorize;
-    const header = c(`---[ Оценка: ${npc.name} ]--------`, 'room-name');
-    const footer = c('------------------------------------', 'room-name');
-
-    const lines = [
-      c(npc.description, 'npc-neutral'),
-      '',
-      c('Оценка сил:', 'exit-name')
-    ];
-
-    const playerHp = this.player.hitPoints;
-    const playerAvgDamage = this._calculateAvgPlayerDamage();
-    const npcHp = npc.hitPoints;
-    const npcAvgDamage = new DamageParser(npc.damage).avg();
-
-    // Избегаем деления на ноль
-    if (playerAvgDamage <= 0) {
-      lines.push('  Вы не можете нанести урон.');
-      return [header, ...lines, footer].join('\n');
-    }
-    if (npcAvgDamage <= 0) {
-      lines.push(`  Противник не может нанести урон. ${c('Легкая победа', 'combat-exp-gain')}.`);
-      return [header, ...lines, footer].join('\n');
-    }
-
-    const roundsToKillNpc = Math.ceil(npcHp / playerAvgDamage);
-    const roundsToKillPlayer = Math.ceil(playerHp / npcAvgDamage);
-
-    lines.push(`  Ваш урон/раунд (средний): ${c(playerAvgDamage.toFixed(1), 'combat-player-attack')}`);
-    lines.push(`  Урон врага/раунд (средний): ${c(npcAvgDamage.toFixed(1), 'combat-npc-attack')}`);
-    lines.push(`  Раундов до победы: ~${c(roundsToKillNpc, 'combat-player-attack')}`);
-    lines.push(`  Раундов до поражения: ~${c(roundsToKillPlayer, 'combat-npc-attack')}`);
-
-    let conclusion = '';
-    let conclusionColor = 'npc-neutral';
-    const ratio = roundsToKillPlayer / roundsToKillNpc;
-
-    if (ratio > 2.5) {
-      conclusion = 'Легкая победа.'; conclusionColor = 'combat-exp-gain';
-    } else if (ratio > 1.5) {
-      conclusion = 'Скорее всего, вы победите.'; conclusionColor = 'exit-name';
-    } else if (ratio >= 0.9) {
-      conclusion = 'Тяжелый бой, шансы равны.'; conclusionColor = 'combat-player-attack';
-    } else if (ratio > 0.6) {
-      conclusion = 'Очень опасно, скорее всего, вы проиграете.'; conclusionColor = 'combat-npc-attack';
-    } else {
-      conclusion = 'Бегите! У вас нет шансов.'; conclusionColor = 'combat-player-death';
-    }
-    lines.push(`\n${c('Вердикт:', 'exit-name')} ${c(conclusion, conclusionColor)}`);
-    return [header, ...lines, footer].join('\n');
-  }
-
-  /**
-   * Рассчитывает средний урон игрока.
-   * @returns {number}
-   * @private
-   */
-  _calculateAvgPlayerDamage() {
-    // Базовый урон 1d6 без оружия
-    let avgDamage = 3.5;
-    
-    // Бонус от силы
-    const strBonus = Math.floor((this.player.strength - 10) / 2);
-    
-    // Бонус от оружия
-    if (this.player.equippedWeapon && this.player.equippedWeapon.damage) {
-      avgDamage = new DamageParser(this.player.equippedWeapon.damage).avg() + strBonus;
-    } else {
-      avgDamage += strBonus;
-    }
-    
-    return Math.max(1, avgDamage);
   }
 
   /**
@@ -663,101 +570,6 @@ ${this.getCurrentRoom().getFullDescription(this)}
    * }>}
    */
   getAvailableActions() {
-    return this.actionGenerator.getAvailableActions();
-  }
-
-  /**
-   * Генерирует список подсказок для автодополнения команды.
-   * @param {string} command - Введенная команда (e.g., 'get', 'kill').
-   * @param {string} prefix - Частичный аргумент команды для фильтрации (e.g., 'меч').
-   * @returns {Array<{text: string, type: 'command'|'item'|'npc'|'exit'}>} Массив объектов подсказок.
-   */
-  getCommandSuggestions(command, prefix = '') {
-    const suggestions = [];
-    const lowerPrefix = prefix.toLowerCase();
-    const currentRoom = this.getCurrentRoom();
-
-    if (!command) {
-      // Если команда не введена, предлагаем базовые команды
-      const allCommands = [...this.commandManager.commands.keys()];
-      return allCommands
-        .filter(cmd => cmd.startsWith(lowerPrefix))
-        .map(cmd => ({ text: cmd, type: 'command' }));
-    }
-
-    const suggestFrom = (items, type) => { // `items` здесь - это массив объектов, а не ID
-      if (!items) return;
-      items
-        .filter(item => item && item.name.toLowerCase().startsWith(lowerPrefix))
-        .forEach(item => suggestions.push({ text: item.name, type }));
-    };
-
-    const itemsInRoom = currentRoom?.items.map(id => this.world.items.get(id)).filter(Boolean) || [];
-    const npcsInRoom = currentRoom?.npcs.map(id => this.world.getNpc(id, currentRoom.area)).filter(npc => npc && npc.isAlive()) || [];
-    const itemsInInventory = this.player.inventory;
-
-    switch (command) {
-      case 'go':
-      case 'идти':
-        return currentRoom.getExits()
-          .filter(exit => exit.startsWith(lowerPrefix))
-          .map(exit => ({ text: exit, type: 'exit' }));
-
-      case 'get':
-      case 'взять':
-        suggestFrom(itemsInRoom, 'item');
-        break;
-
-      case 'drop':
-      case 'выбросить':
-      case 'equip':
-      case 'надеть':
-      case 'unequip':
-      case 'снять':
-      case 'use':
-      case 'использовать':
-        suggestFrom(itemsInInventory, 'item');
-        break;
-
-      case 'gain':
-      case 'получить': {
-        const statKeys = [
-          'сила', 'str',
-          'ловкость', 'dex',
-          'телосложение', 'con',
-          'интеллект', 'int',
-          'мудрость', 'wis',
-          'харизма', 'cha',
-          'здоровье', 'hp', 'хп',
-          'максхп', 'maxhp',
-          'уровень', 'lvl', 'лвл',
-          'опыт', 'exp'
-        ];
-        return statKeys
-          .filter(key => key.startsWith(lowerPrefix))
-          .map(key => ({ text: key, type: 'command' })); // Используем тип 'command' для желтого цвета
-      }
-
-      case 'kill':
-      case 'убить':
-      case 'talk':
-      case 'kick':
-      case 'пнуть':
-      case 'поговорить':
-        suggestFrom(npcsInRoom, 'npc');
-        break;
-
-      case 'look':
-      case 'осмотреть':
-      case 'consider':
-      case 'оценить':
-        suggestFrom(itemsInRoom, 'item');
-        suggestFrom(npcsInRoom, 'npc');
-        suggestFrom(itemsInInventory, 'item');
-        break;
-    }
-
-    // Убираем дубликаты, если они есть
-    return [...new Map(suggestions.map(item => [item.text, item])).values()];
+    return this.actionGenerator.getAvailableActions(); // Делегируем вызов
   }
 }
