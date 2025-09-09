@@ -1,5 +1,5 @@
 <template>
-  <div class="game-terminal" :class="{ fullscreen: isFullscreen }">
+  <div class="game-terminal" :class="{ fullscreen: isFullscreen }" @click="handlePanelClick">
     <div class="terminal-output" ref="outputElement" @click="handleOutputClick">
       <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'">
         {{ isFullscreen ? '⤡' : '⛶' }}
@@ -14,6 +14,16 @@
     </div>
 
     <div class="input-container">
+      <div v-if="isHistoryVisible" class="history-box">
+        <div v-if="reversedCommandHistory.length === 0" class="history-empty">История команд пуста</div>
+        <div
+          v-for="(command, index) in reversedCommandHistory"
+          :key="index"
+          class="history-item"
+          @click="selectFromHistory(command)"
+          :title="command"
+        >{{ command }}</div>
+      </div>
       <div v-if="suggestions.length > 0" class="suggestions-box">
         <div
           v-for="(suggestion, index) in suggestions"
@@ -29,6 +39,7 @@
         <input
           v-model="currentInput"
           @keyup.enter="processCommand"
+          @keydown.esc.prevent="handleEsc"
           @keydown.up.prevent="navigateSuggestionsUp"
           @keydown.down.prevent="navigateSuggestionsDown"
           @keydown.tab.prevent="applyActiveSuggestion"
@@ -37,6 +48,10 @@
           :disabled="!isInitialized"
           autocomplete="off"
         />
+        <div class="input-actions">
+          <button @click="handleEsc" class="input-action-btn" title="Очистить (ESC)">×</button>
+          <button @click="toggleHistoryPanel" class="input-action-btn" title="История команд">◷</button>
+        </div>
       </div>
 
       <div class="side-panels">
@@ -47,10 +62,9 @@
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch } from 'vue';
+import { ref, onMounted, nextTick, watch, computed } from 'vue';
 import { useGameStore } from '../../stores/game.js';
 import PlayerStatsPanel from './PlayerStatsPanel.vue';
-import MapPanel from './MapPanel.vue';
 
 /** @type {import('vue').Ref<string>} Текущий текст в поле ввода. */
 const currentInput = ref('');
@@ -72,16 +86,48 @@ const suggestions = ref([]);
 const isInitialized = ref(false);
 /** @type {import('vue').Ref<number>} Индекс активной подсказки. */
 const activeSuggestionIndex = ref(-1);
+/** @type {import('vue').Ref<boolean>} Флаг видимости панели истории. */
+const isHistoryVisible = ref(false);
 
 const gameStore = useGameStore();
+
+/** @type {import('vue').ComputedRef<string[]>} Перевернутый массив истории команд. */
+const reversedCommandHistory = computed(() => [...commandHistory.value].reverse());
 
 /**
  * Обрабатывает клик по области вывода.
  * Возвращает фокус, только если нет выделенного текста.
  */
 const handleOutputClick = () => {
+  // Закрываем панели, если они открыты
+  if (isHistoryVisible.value) isHistoryVisible.value = false;
+  if (suggestions.value.length > 0) suggestions.value = [];
+
   if (window.getSelection().toString().length === 0) {
     refocusInput();
+  }
+};
+
+/**
+ * Обрабатывает нажатие клавиши ESC или кнопки очистки.
+ * Приоритет: закрыть панель истории -> закрыть подсказки -> очистить ввод.
+ */
+const handleEsc = () => {
+  if (isHistoryVisible.value) {
+    isHistoryVisible.value = false;
+  } else if (suggestions.value.length > 0) {
+    suggestions.value = [];
+  } else if (currentInput.value) {
+    currentInput.value = '';
+  }
+  refocusInput();
+};
+
+/** Переключает видимость панели истории. */
+const toggleHistoryPanel = () => {
+  isHistoryVisible.value = !isHistoryVisible.value;
+  if (isHistoryVisible.value) {
+    suggestions.value = []; // Не показывать одновременно с подсказками
   }
 };
 
@@ -201,6 +247,13 @@ const applyActiveSuggestion = () => {
   applySuggestion(suggestionToApply);
 };
 
+/** Выбирает команду из истории и вставляет в поле ввода. */
+const selectFromHistory = (command) => {
+  currentInput.value = command;
+  isHistoryVisible.value = false;
+  refocusInput();
+};
+
 /**
  * Обрабатывает ввод и выполнение команды.
  * Если выбрана подсказка, сначала применяет ее.
@@ -212,6 +265,7 @@ const processCommand = async () => {
   const input = currentInput.value.trim();
   if (!input) return;
 
+  isHistoryVisible.value = false; // Закрываем историю при отправке
   suggestions.value = []; // Скрываем подсказки после отправки
 
   // Добавляем команду в историю, если она не дублирует последнюю.
@@ -284,6 +338,45 @@ onMounted(async () => {
   font-size: 14px;
   line-height: 1.4;
   position: relative;
+}
+
+.history-box {
+  position: absolute;
+  bottom: 100%;
+  left: 0;
+  right: 0;
+  background-color: #002a00;
+  border: 1px solid #00ff00;
+  border-bottom: none;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+}
+
+.history-item {
+  padding: 5px 10px;
+  color: #00ff00;
+  cursor: pointer;
+  font-size: 13px;
+  border-bottom: 1px solid #004400;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.history-item:last-child {
+  border-bottom: none;
+}
+
+.history-item:hover {
+  background-color: #00ff00;
+  color: #000;
+}
+
+.history-empty {
+  padding: 10px;
+  color: #888;
+  text-align: center;
 }
 
 .suggestions-box {
@@ -465,6 +558,26 @@ input {
   font-family: 'Courier New', monospace;
   font-size: 14px;
   outline: none;
+}
+
+.input-actions {
+  display: flex;
+  align-items: center;
+}
+
+.input-action-btn {
+  background: transparent;
+  border: none;
+  color: #00ff00;
+  font-size: 20px;
+  cursor: pointer;
+  padding: 0 8px;
+  line-height: 1;
+  font-family: 'Courier New', monospace;
+}
+
+.input-action-btn:hover {
+  color: #ffff00;
 }
 
 input::placeholder {
