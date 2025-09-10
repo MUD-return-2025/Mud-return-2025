@@ -6,5 +6,12 @@
     "damageMultiplier": 1.5,
     "cost": 10,
     "cooldown": 2
+  },
+  "recall": {
+    "name": "Возврат",
+    "description": "Мгновенно телепортироваться в центр Мидгарда, потратив часть выносливости.",
+    "level": 3,
+    "cost": 50,
+    "cooldown": 10
   }
 }
