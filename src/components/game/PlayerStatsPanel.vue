@@ -1,6 +1,6 @@
 <script setup>
 // Компонент Vue для отображения панели статистики игрока, инвентаря, экипировки и карты.
-import { ref, watch, defineEmits } from 'vue';
+import { ref, watch, defineEmits, onUnmounted } from 'vue';
 import { useGameStore } from '../../stores/game.js';
 import EquipmentPanel from './EquipmentPanel.vue';
 import InventoryPanel from './InventoryPanel.vue';
@@ -27,6 +27,44 @@ watch(() => gameStore.player.state, (newState) => {
 const isExpanded = ref(true);
 /** @type {import('vue').Ref<string>} Активная вкладка */
 const activeTab = ref('stats');
+/** @type {import('vue').Ref<number>} Ширина панели в пикселях */
+const panelWidth = ref(400);
+
+/**
+ * Начинает процесс изменения размера панели.
+ * @param {MouseEvent} event
+ */
+const startResize = (event) => {
+  // Предотвращаем стандартное поведение, например, выделение текста
+  event.preventDefault();
+  // Меняем курсор для всего документа для лучшего UX
+  document.body.style.cursor = 'col-resize';
+  document.body.style.userSelect = 'none';
+  // Добавляем глобальные слушатели
+  window.addEventListener('mousemove', resizePanel);
+  window.addEventListener('mouseup', stopResize);
+};
+
+/**
+ * Изменяет ширину панели в ответ на движение мыши.
+ * @param {MouseEvent} event
+ */
+const resizePanel = (event) => {
+  // Ширина = (ширина окна - координата X курсора)
+  const newWidth = window.innerWidth - event.clientX;
+  // Ограничиваем минимальную и максимальную ширину
+  panelWidth.value = Math.max(300, Math.min(newWidth, 800));
+};
+
+/**
+ * Завершает процесс изменения размера панели и очищает слушатели.
+ */
+const stopResize = () => {
+  document.body.style.cursor = '';
+  document.body.style.userSelect = '';
+  window.removeEventListener('mousemove', resizePanel);
+  window.removeEventListener('mouseup', stopResize);
+};
 
 /** @type {Array<{id: string, name: string}>} Массив вкладок панели */
 const tabs = [
@@ -55,10 +93,18 @@ const togglePanel = () => {
   isExpanded.value = !isExpanded.value;
 };
 
+/**
+ * Очистка глобальных слушателей при размонтировании компонента,
+ * чтобы избежать утечек памяти.
+ */
+onUnmounted(() => {
+  stopResize();
+});
 </script>
 
 <template>
-  <div class="stats-panel" v-if="gameStore.gameStarted">
+  <div class="stats-panel" v-if="gameStore.gameStarted" :style="{ width: panelWidth + 'px' }">
+    <div class="resizer" @mousedown.prevent="startResize"></div>
     <div class="panel-header">
       <h3>📊 {{ gameStore.player.name }}</h3>
       <button @click="togglePanel" class="toggle-btn">
@@ -235,7 +281,6 @@ const togglePanel = () => {
   position: fixed;
   top: 20px;
   right: 20px;
-  width: 400px;
   max-height: calc(100vh - 40px);
   background-color: #001100;
   border: 2px solid #00ff00;
@@ -244,6 +289,16 @@ const togglePanel = () => {
   z-index: 2001;
   border-radius: 4px;
   overflow: hidden;
+}
+
+.resizer {
+  position: absolute;
+  left: -3px;
+  top: 0;
+  bottom: 0;
+  width: 6px;
+  cursor: col-resize;
+  z-index: 10;
 }
 
 .panel-header {
