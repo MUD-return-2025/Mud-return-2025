@@ -119,7 +119,30 @@ export class Room {
     // Вспомогательная функция для оборачивания текста в span с классом для стилизации
     const colorize = (text, className) => `<span class="${className}">${text}</span>`;
 
-    let desc = `${colorize(this.name, 'room-name')}\n${this.description}\n`;
+    /**
+     * Разбивает текст на строки по 80 символов, не разрывая слова.
+     * @param {string} text - Исходный текст.
+     * @param {number} [width=80] - Максимальная ширина строки.
+     * @returns {string} - Отформатированный текст.
+     */
+    const wordWrap = (text, width = 80) => {
+      if (!text) return '';
+      const words = text.split(' ');
+      let currentLine = '';
+      const lines = [];
+      for (const word of words) {
+        if ((currentLine + ' ' + word).length > width && currentLine.length > 0) {
+          lines.push(currentLine);
+          currentLine = word;
+        } else {
+          currentLine += (currentLine ? ' ' : '') + word;
+        }
+      }
+      lines.push(currentLine);
+      return lines.join('\n');
+    };
+
+    let desc = `${colorize(this.name, 'room-name')}\n${wordWrap(this.description)}\n`;
     
     // Добавляем информацию о выходах
     if (this.exits.size > 0) {
@@ -132,12 +155,12 @@ export class Room {
         }
         return colorize(exit, 'exit-name');
       });
-      desc += `\nВыходы: ${exitNames.join(', ')}\n`;
+      desc += `\n${colorize('Выходы:', 'info-label')} ${exitNames.join(', ')}\n`;
     }
     
     // Добавляем информацию о предметах
     if (this.items.length > 0) {
-      desc += '\nВы видите:\n';
+      desc += `\n${colorize('Вы видите:', 'info-label')}\n`;
       this.items.forEach(globalId => { 
         const item = game.world.items.get(globalId); 
         if (item) desc += `  ${colorize(item.name, 'item-name')}\n`; 
@@ -146,7 +169,7 @@ export class Room {
     
     // Добавляем информацию о НПС
     if (this.npcs.length > 0) {
-      desc += '\nЗдесь находятся:\n';
+      desc += `\n${colorize('Здесь находятся:', 'info-label')}\n`;
       this.npcs.forEach(npcId => { const npc = game.getNpc(npcId, this.area); if (npc) desc += `  ${colorize(npc.name, `npc-name npc-${npc.type}`)}${npc.hitPoints <= 0 ? colorize(' (мертв)', 'npc-dead') : ''}\n`; });
     }
     

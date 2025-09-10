@@ -501,7 +501,7 @@ ${this.getCurrentRoom().getFullDescription(this)}
 
     this.player.currentRoom = targetRoomId;
     const newRoom = this.getCurrentRoom();
-    return { success: true, message: `Вы идете ${direction}.\n\n${newRoom.getFullDescription(this)}` };
+    return { success: true, message: `${this.colorize(`Вы идете ${direction}.`, 'info-label')}\n\n${newRoom.getFullDescription(this)}` };
   }
 
   /**

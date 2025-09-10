@@ -1,12 +1,12 @@
 <template>
   <div class="game-terminal" :class="{ fullscreen: isFullscreen }" @click="handlePanelClick">
+    <div class="side-panels">
+      <PlayerStatsPanel @action-performed="refocusInput" />
+    </div>
+    <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'" tabindex="-1">
+      {{ isFullscreen ? '⤡' : '⛶' }}
+    </button>
     <div class="terminal-output" ref="outputElement" @click="handleOutputClick">
-      <div class="side-panels">
-        <PlayerStatsPanel @action-performed="refocusInput" />
-      </div>
-      <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'" tabindex="-1">
-        {{ isFullscreen ? '⤡' : '⛶' }}
-      </button>
       <div v-if="!gameStore.gameStarted" class="welcome-message">
         <p>🏰 Добро пожаловать в Мидгард! 🏰</p>
         <p>Введите "new" для начала новой игры или "load" для загрузки сохранения.</p>
@@ -133,10 +133,7 @@ onMounted(async () => {
 }
 
 .side-panels {
-  position: absolute;
-  top: 0;
-  right: 0;
-  height: 100%;
+  /* Этот блок теперь позиционируется относительно .game-terminal */
 }
 
 .game-terminal.fullscreen .terminal-output {
@@ -152,7 +149,6 @@ onMounted(async () => {
   color: #00ff00;
   font-size: 14px;
   line-height: 1.4;
-  position: relative;
 }
 
 .fullscreen-btn {
@@ -188,6 +184,10 @@ onMounted(async () => {
 .message {
   margin: 2px 0;
   white-space: pre-wrap;
+}
+
+.message :deep(.info-label) {
+  color: #888888; /* Dark Gray */
 }
 
 .message :deep(.user-input) {
