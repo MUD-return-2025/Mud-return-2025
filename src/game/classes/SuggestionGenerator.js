@@ -67,6 +67,8 @@ export class SuggestionGenerator {
       case 'убить':
       case 'talk':
       case 'поговорить':
+      case 'kick':
+      case 'пнуть':
         suggestFrom(npcsInRoom, 'npc');
         break;
 
@@ -78,6 +80,16 @@ export class SuggestionGenerator {
         suggestFrom(npcsInRoom, 'npc');
         suggestFrom(itemsInInventory, 'item');
         break;
+
+      case 'gain':
+      case 'получить': {
+        const statNames = [
+          'str', 'dex', 'con', 'int', 'wis', 'cha', 'hp', 'maxhp', 'lvl', 'exp'
+        ];
+        return statNames
+          .filter(stat => stat.startsWith(lowerPrefix))
+          .map(stat => ({ text: stat, type: 'command' }));
+      }
     }
 
     // Убираем дубликаты, если они есть
