@@ -110,7 +110,7 @@ const traderItems = computed(() => {
         <button
           v-if="selectedItem.type === 'potion'"
           @click="handleItemAction('use ' + selectedItem.name)"
-          class="action-btn"
+          class="action-btn success"
         >
           Использовать
         </button>
@@ -126,7 +126,7 @@ const traderItems = computed(() => {
         >
           Оценить
         </button>
-        <button v-if="hasTrader" @click="handleItemAction('sell ' + selectedItem.name)" class="action-btn">
+        <button v-if="hasTrader" @click="handleItemAction('sell ' + selectedItem.name)" class="action-btn trade">
           Продать
         </button>
         <button
@@ -158,7 +158,7 @@ const traderItems = computed(() => {
             <button @click="handleItemAction('consider ' + item.name)" class="action-btn">
               Оценить
             </button>
-            <button @click="handleItemAction('buy ' + item.name)" class="action-btn">
+            <button @click="handleItemAction('buy ' + item.name)" class="action-btn success">
               Купить
             </button>
           </div>
@@ -185,6 +185,17 @@ const traderItems = computed(() => {
 .action-btn:hover { background-color: #00ff00; color: #000; }
 .action-btn.danger { border-color: #ff4444; color: #ff4444; }
 .action-btn.danger:hover { background-color: #ff4444; color: #000; }
+.action-btn.success {
+  border-color: #66ff66;
+  color: #66ff66;
+}
+.action-btn.success:hover { background-color: #66ff66; color: #000; }
+.action-btn.trade {
+  border-color: #ffff00;
+  color: #ffff00;
+}
+.action-btn.trade:hover { background-color: #ffff00; color: #000; }
+
 .actions-divider { width: 100%; border: 0; border-top: 1px solid #004400; margin: 10px 0; }
 .trader-shop { margin-top: 15px; padding-top: 10px; }
 .trader-shop h4 { margin: 0 0 10px 0; color: #ffff00; font-size: 12px; }

@@ -41,6 +41,9 @@ const tabs = [
  * @param {string} command - Команда для выполнения.
  */
 const handleCommand = (command) => {
+  if (command === 'list') {
+    activeTab.value = 'inventory';
+  }
   gameStore.processCommand(command);
   emit('action-performed');
 };
