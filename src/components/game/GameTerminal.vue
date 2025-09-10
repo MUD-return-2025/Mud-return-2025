@@ -1,133 +1,55 @@
 <template>
   <div class="game-terminal" :class="{ fullscreen: isFullscreen }" @click="handlePanelClick">
     <div class="terminal-output" ref="outputElement" @click="handleOutputClick">
-      <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'">
+      <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'" tabindex="-1">
         {{ isFullscreen ? '⤡' : '⛶' }}
       </button>
       <div v-if="!gameStore.gameStarted" class="welcome-message">
         <p>🏰 Добро пожаловать в Мидгард! 🏰</p>
         <p>Введите "new" для начала новой игры или "load" для загрузки сохранения.</p>
       </div>
-
       <div v-for="(message, index) in gameStore.messages" :key="index" class="message" v-html="message">
       </div>
     </div>
 
-    <div class="input-container">
-      <div v-if="isHistoryVisible" class="history-box">
-        <div v-if="reversedCommandHistory.length === 0" class="history-empty">История команд пуста</div>
-        <div
-          v-for="(command, index) in reversedCommandHistory"
-          :key="index"
-          class="history-item"
-          @click="selectFromHistory(command)"
-          :title="command"
-        >{{ command }}</div>
-      </div>
-      <div v-if="suggestions.length > 0" class="suggestions-box">
-        <div
-          v-for="(suggestion, index) in suggestions"
-          :key="index"
-          :class="['suggestion-item', { active: activeSuggestionIndex === index }]"
-          @click="applySuggestion(suggestion)"
-        >
-          <span :class="`suggestion-type-${suggestion.type}`">{{ suggestion.type.charAt(0).toUpperCase() }}</span> {{ suggestion.text }}
-        </div>
-      </div>
-      <div class="terminal-input">
-        <span class="prompt">></span>
-        <input
-          v-model="currentInput"
-          @keyup.enter="processCommand"
-          @keydown.esc.prevent="handleEsc"
-          @keydown.up.prevent="navigateSuggestionsUp"
-          @keydown.down.prevent="navigateSuggestionsDown"
-          @keydown.tab.prevent="applyActiveSuggestion"
-          ref="inputElement"
-          placeholder="Введите команду..."
-          :disabled="!isInitialized"
-          autocomplete="off"
-        />
-        <div class="input-actions">
-          <button @click="handleEsc" class="input-action-btn" title="Очистить (ESC)">×</button>
-          <button @click="toggleHistoryPanel" class="input-action-btn" title="История команд">◷</button>
-        </div>
-      </div>
-
-      <div class="side-panels">
-        <PlayerStatsPanel @action-performed="refocusInput" />
-      </div>
+    <TerminalInput
+      ref="terminalInputRef"
+      :command-history="commandHistory"
+      :is-initialized="isInitialized"
+      @process-command="processCommand"
+    />
+    <div class="side-panels">
+      <PlayerStatsPanel @action-performed="refocusInput" />
     </div>
   </div>
 </template>
 
 <script setup>
-import { ref, onMounted, nextTick, watch, computed } from 'vue';
+import { ref, onMounted, nextTick, watch } from 'vue';
 import { useGameStore } from '../../stores/game.js';
 import PlayerStatsPanel from './PlayerStatsPanel.vue';
+import TerminalInput from './TerminalInput.vue';
 
-/** @type {import('vue').Ref<string>} Текущий текст в поле ввода. */
-const currentInput = ref('');
 /** @type {import('vue').Ref<string[]>} История введенных команд. */
 const commandHistory = ref([]);
-/** @type {import('vue').Ref<number>} Текущий индекс в истории команд для навигации. */
-const historyIndex = ref(0);
-/** @type {string} Временное хранилище для текста в поле ввода при навигации по истории. */
-let tempInputOnNavStart = '';
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент вывода терминала. */
 const outputElement = ref(null);
-/** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент поля ввода. */
-const inputElement = ref(null);
+/** @type {import('vue').Ref<InstanceType<typeof TerminalInput>|null>} Ссылка на компонент ввода. */
+const terminalInputRef = ref(null);
 /** @type {import('vue').Ref<boolean>} Флаг полноэкранного режима. */
 const isFullscreen = ref(false);
-/** @type {import('vue').Ref<Array<{text: string, type: string}>>} Массив подсказок для автодополнения. */
-const suggestions = ref([]);
 /** @type {import('vue').Ref<boolean>} Флаг, что движок и хранилище инициализированы. */
 const isInitialized = ref(false);
-/** @type {import('vue').Ref<number>} Индекс активной подсказки. */
-const activeSuggestionIndex = ref(-1);
-/** @type {import('vue').Ref<boolean>} Флаг видимости панели истории. */
-const isHistoryVisible = ref(false);
 
 const gameStore = useGameStore();
-
-/** @type {import('vue').ComputedRef<string[]>} Перевернутый массив истории команд. */
-const reversedCommandHistory = computed(() => [...commandHistory.value].reverse());
 
 /**
  * Обрабатывает клик по области вывода.
  * Возвращает фокус, только если нет выделенного текста.
  */
 const handleOutputClick = () => {
-  // Закрываем панели, если они открыты
-  if (isHistoryVisible.value) isHistoryVisible.value = false;
-  if (suggestions.value.length > 0) suggestions.value = [];
-
   if (window.getSelection().toString().length === 0) {
     refocusInput();
-  }
-};
-
-/**
- * Обрабатывает нажатие клавиши ESC или кнопки очистки.
- * Приоритет: закрыть панель истории -> закрыть подсказки -> очистить ввод.
- */
-const handleEsc = () => {
-  if (isHistoryVisible.value) {
-    isHistoryVisible.value = false;
-  } else if (suggestions.value.length > 0) {
-    suggestions.value = [];
-  } else if (currentInput.value) {
-    currentInput.value = '';
-  }
-  refocusInput();
-};
-
-/** Переключает видимость панели истории. */
-const toggleHistoryPanel = () => {
-  isHistoryVisible.value = !isHistoryVisible.value;
-  if (isHistoryVisible.value) {
-    suggestions.value = []; // Не показывать одновременно с подсказками
   }
 };
 
@@ -135,7 +57,7 @@ const toggleHistoryPanel = () => {
  * Возвращает фокус на поле ввода.
  */
 const refocusInput = () => {
-  inputElement.value?.focus();
+  terminalInputRef.value?.refocusInput();
 };
 
 /**
@@ -145,52 +67,6 @@ const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value;
   // Возвращаем фокус на поле ввода после изменения DOM
   nextTick(refocusInput);
-};
-
-/**
- * Осуществляет навигацию по списку подсказок или истории команд.
- */
-const navigateSuggestionsUp = () => {
-  // Приоритет у подсказок
-  if (suggestions.value.length > 0) {
-    activeSuggestionIndex.value = activeSuggestionIndex.value <= 0
-      ? suggestions.value.length - 1
-      : activeSuggestionIndex.value - 1;
-  } else {
-    // Если подсказок нет, навигируемся по истории
-    navigateHistory('up');
-  }
-};
-
-const navigateSuggestionsDown = () => {
-  // Приоритет у подсказок
-  if (suggestions.value.length > 0) {
-    if (activeSuggestionIndex.value < suggestions.value.length - 1) {
-      activeSuggestionIndex.value++;
-    } else {
-      activeSuggestionIndex.value = 0;
-    }
-  } else {
-    // Если подсказок нет, навигируемся по истории
-    navigateHistory('down');
-  }
-};
-
-/**
- * Перемещается по истории команд.
- * @param {'up' | 'down'} direction
- */
-const navigateHistory = (direction) => {
-  if (commandHistory.value.length === 0) return;
-  if (direction === 'up') {
-    if (historyIndex.value === commandHistory.value.length) {
-      tempInputOnNavStart = currentInput.value;
-    }
-    if (historyIndex.value > 0) historyIndex.value--;
-  } else {
-    if (historyIndex.value < commandHistory.value.length) historyIndex.value++;
-  }
-  currentInput.value = commandHistory.value[historyIndex.value] ?? tempInputOnNavStart;
 };
 
 /**
@@ -208,83 +84,24 @@ const scrollToBottom = () => {
 // Отслеживаем изменения в `gameMessages` для автопрокрутки.
 watch(() => gameStore.messages, scrollToBottom, { deep: true });
 
-// Отслеживаем изменения в поле ввода для генерации подсказок.
-watch(currentInput, (newInput) => {
-  if (!gameStore.gameStarted || !newInput.trim()) {
-    suggestions.value = [];
-    return;
-  }
-
-  const parts = newInput.split(' ');
-  const command = parts[0].toLowerCase();
-  const prefix = parts.length > 1 ? parts.slice(1).join(' ') : '';
-
-  // Если вводится только первая команда, предлагаем сами команды
-  if (parts.length === 1) {
-    suggestions.value = gameStore.engine.getCommandSuggestions(null, command);
-  } else {
-    suggestions.value = gameStore.engine.getCommandSuggestions(command, prefix);
-  }
-  activeSuggestionIndex.value = -1; // Сбрасываем выбор
-});
-
-/** Применяет выбранную подсказку к полю ввода. */
-const applySuggestion = (suggestion) => {
-  const parts = currentInput.value.split(' ');
-  parts[parts.length - 1] = suggestion.text;
-  currentInput.value = parts.join(' ');
-  suggestions.value = []; // Скрываем подсказки
-  refocusInput(); // Возвращаем фокус
-};
-
-/** Применяет активную (или первую) подсказку по нажатию Tab. */
-const applyActiveSuggestion = () => {
-  if (suggestions.value.length === 0) return;
-  // Если подсказка выбрана стрелками, используем ее. Иначе — первую в списке.
-  const suggestionToApply = activeSuggestionIndex.value !== -1
-    ? suggestions.value[activeSuggestionIndex.value]
-    : suggestions.value[0];
-  applySuggestion(suggestionToApply);
-};
-
-/** Выбирает команду из истории и вставляет в поле ввода. */
-const selectFromHistory = (command) => {
-  currentInput.value = command;
-  isHistoryVisible.value = false;
-  refocusInput();
-};
-
 /**
  * Обрабатывает ввод и выполнение команды.
- * Если выбрана подсказка, сначала применяет ее.
  */
-const processCommand = async () => {
-  if (suggestions.value.length > 0 && activeSuggestionIndex.value !== -1) {
-    applySuggestion(suggestions.value[activeSuggestionIndex.value]);
-  }
-  const input = currentInput.value.trim();
+const processCommand = async (input) => {
   if (!input) return;
-
-  isHistoryVisible.value = false; // Закрываем историю при отправке
-  suggestions.value = []; // Скрываем подсказки после отправки
 
   // Добавляем команду в историю, если она не дублирует последнюю.
   if (commandHistory.value.length === 0 || commandHistory.value[commandHistory.value.length - 1] !== input) {
     commandHistory.value.push(input);
   }
-  // Сбрасываем индекс истории, чтобы при следующем нажатии "вверх" показалась последняя команда.
-  historyIndex.value = commandHistory.value.length;
 
   await gameStore.processCommand(input);
-
-  currentInput.value = '';
   refocusInput();
 };
 
 onMounted(async () => {
   // Фокусируемся на поле ввода при загрузке компонента.
   refocusInput();
-  historyIndex.value = commandHistory.value.length;
 
   // Инициализируем хранилище и движок
   if (!isInitialized.value) {
@@ -305,7 +122,7 @@ onMounted(async () => {
   position: relative;
 }
 
-.game-terminal.fullscreen {
+.game-terminal.fullscreen, .game-terminal.fullscreen .side-panels {
   position: fixed;
   top: 0;
   left: 0;
@@ -313,10 +130,6 @@ onMounted(async () => {
   height: 100vh;
   z-index: 2000;
   border: none;
-}
-
-.input-container {
-  position: relative;
 }
 
 .side-panels {
@@ -338,97 +151,6 @@ onMounted(async () => {
   font-size: 14px;
   line-height: 1.4;
   position: relative;
-}
-
-.history-box {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  background-color: #002a00;
-  border: 1px solid #00ff00;
-  border-bottom: none;
-  max-height: 200px;
-  overflow-y: auto;
-  z-index: 10;
-}
-
-.history-item {
-  padding: 5px 10px;
-  color: #00ff00;
-  cursor: pointer;
-  font-size: 13px;
-  border-bottom: 1px solid #004400;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-}
-
-.history-item:last-child {
-  border-bottom: none;
-}
-
-.history-item:hover {
-  background-color: #00ff00;
-  color: #000;
-}
-
-.history-empty {
-  padding: 10px;
-  color: #888;
-  text-align: center;
-}
-
-.suggestions-box {
-  position: absolute;
-  bottom: 100%;
-  left: 0;
-  right: 0;
-  background-color: #002a00;
-  border: 1px solid #00ff00;
-  border-bottom: none;
-  max-height: 150px;
-  overflow-y: auto;
-  z-index: 10;
-}
-
-.suggestion-item {
-  padding: 4px 10px;
-  color: #00ff00;
-  cursor: pointer;
-  font-size: 13px;
-  border-bottom: 1px solid #004400;
-}
-
-.suggestion-item:last-child {
-  border-bottom: none;
-}
-
-.suggestion-item:hover, .suggestion-item.active {
-  background-color: #00ff00;
-  color: #000;
-}
-
-.suggestion-item .suggestion-type-command { color: #ffff00; }
-.suggestion-item .suggestion-type-item { color: #ff00ff; }
-.suggestion-item .suggestion-type-npc { color: #ff4444; }
-.suggestion-item .suggestion-type-exit { color: #00ffff; }
-
-.suggestion-item:hover .suggestion-type-command,
-.suggestion-item.active .suggestion-type-command,
-.suggestion-item:hover .suggestion-type-item,
-.suggestion-item.active .suggestion-type-item,
-.suggestion-item:hover .suggestion-type-npc,
-.suggestion-item.active .suggestion-type-npc,
-.suggestion-item:hover .suggestion-type-exit,
-.suggestion-item.active .suggestion-type-exit {
-  color: #000;
-}
-
-.suggestion-item span {
-  display: inline-block;
-  width: 1.5em;
-  font-weight: bold;
 }
 
 .fullscreen-btn {
@@ -535,56 +257,6 @@ onMounted(async () => {
   color: #ff3333; /* Ярко-красный для смерти игрока */
   font-weight: bold;
 }
-
-.terminal-input {
-  display: flex;
-  align-items: center;
-  padding: 10px;
-  background-color: #002200;
-  border-top: 1px solid #00ff00;
-}
-
-.prompt {
-  color: #00ff00;
-  margin-right: 8px;
-  font-weight: bold;
-}
-
-input {
-  flex: 1;
-  background: transparent;
-  border: none;
-  color: #00ff00;
-  font-family: 'Courier New', monospace;
-  font-size: 14px;
-  outline: none;
-}
-
-.input-actions {
-  display: flex;
-  align-items: center;
-}
-
-.input-action-btn {
-  background: transparent;
-  border: none;
-  color: #00ff00;
-  font-size: 20px;
-  cursor: pointer;
-  padding: 0 8px;
-  line-height: 1;
-  font-family: 'Courier New', monospace;
-}
-
-.input-action-btn:hover {
-  color: #ffff00;
-}
-
-input::placeholder {
-  color: #006600;
-}
-
-
 
 .terminal-output::-webkit-scrollbar {
   width: 8px;
