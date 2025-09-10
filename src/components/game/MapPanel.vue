@@ -6,16 +6,9 @@ const gameStore = useGameStore();
 // Определяем событие, которое компонент может генерировать
 const emit = defineEmits(['action-performed']);
 
-/**
- * @description Вычисляемые свойства для определения текущей зоны и комнаты.
- * Возвращают массив `[areaId, localRoomId]`.
- */
-const currentRoomIds = computed(() => {
-  if (!gameStore.gameStarted || !gameStore.player.currentRoom) return [null, null];
-  return gameStore.engine.world.parseGlobalId(gameStore.player.currentRoom);
-});
-const currentAreaId = computed(() => currentRoomIds.value[0]);
-const currentLocalRoomId = computed(() => currentRoomIds.value[1]);
+const currentRoomIds = computed(() => gameStore.currentRoomIds);
+const currentAreaId = computed(() => gameStore.currentRoomIds[0]);
+const currentLocalRoomId = computed(() => gameStore.currentRoomIds[1]);
 
 /**
  * @description Вычисляемое свойство, возвращающее список комнат в текущей игровой зоне.

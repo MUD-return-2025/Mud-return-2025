@@ -54,6 +54,11 @@ export const useGameStore = defineStore('game', () => {
     return engine.scanForHostiles ? engine.scanForHostiles() : [];
   });
 
+  const currentRoomIds = computed(() => {
+    if (!gameStarted.value || !player.currentRoom) return [null, null];
+    return engine.world.parseGlobalId(player.currentRoom);
+  });
+
   // --- Actions ---
 
   /**
@@ -179,6 +184,7 @@ export const useGameStore = defineStore('game', () => {
     learnedSkills,
     groupedActions,
     radarData,
+    currentRoomIds,
 
     // Actions
     initialize,

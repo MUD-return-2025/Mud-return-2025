@@ -220,63 +220,6 @@ export class GameEngine {
   }
 
   /**
-   * Сравнивает два предмета экипировки.
-   * @param {object} newItem - Новый предмет.
-   * @param {object} equippedItem - Надетый предмет.
-   * @param {string} itemTypeName - Название типа предмета (Оружие/Броня).
-   * @returns {string}
-   * @private
-   */
-  _compareEquipment(newItem, equippedItem, itemTypeName) {
-    const c = this.colorize;
-    if (!equippedItem) {
-      return `\n\n${c('Сравнение:', 'exit-name')}\n  У вас не надето: ${itemTypeName}.`;
-    }
-
-    let comparison = `\n\n${c('Сравнение с надетым', 'exit-name')} (${c(equippedItem.name, 'item-name')}):\n`;
-    let better = 0;
-    let worse = 0;
-    
-    const compareStat = (name, newItemStat, equippedItemStat, lowerIsBetter = false) => {
-      if (newItemStat === equippedItemStat) return `  ${name}: ${newItemStat.toFixed(1)} (=)\n`;
-      
-      const isBetter = lowerIsBetter ? newItemStat < equippedItemStat : newItemStat > equippedItemStat;
-      const diff = newItemStat - equippedItemStat;
-      const diffStr = diff > 0 ? `+${diff.toFixed(1)}` : `${diff.toFixed(1)}`;
-
-      if (isBetter) {
-        better++;
-        return `  ${name}: ${newItemStat.toFixed(1)} (${c(diffStr, 'combat-exp-gain')})\n`;
-      } else {
-        worse++;
-        return `  ${name}: ${newItemStat.toFixed(1)} (${c(diffStr, 'combat-npc-death')})\n`;
-      }
-    };
-
-    if (newItem.type === 'weapon') {
-      const newItemDamage = new DamageParser(newItem.damage).avg();
-      const equippedItemDamage = new DamageParser(equippedItem.damage).avg();
-      comparison += compareStat('Средний урон', newItemDamage, equippedItemDamage);
-    }    
-    if (newItem.type === 'armor') {
-      comparison += compareStat('Защита', newItem.armor || 0, equippedItem.armor || 0);
-    }
-
-    comparison += compareStat('Вес', newItem.weight || 0, equippedItem.weight || 0, true);
-    comparison += `  Ценность: ${newItem.value || 0} (=)\n`;
-
-    if (better > worse) {
-      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c('лучше', 'combat-exp-gain')}, чем то, что на вас надето.`;
-    } else if (worse > better) {
-      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c('хуже', 'combat-npc-death')}, чем то, что на вас надето.`;
-    } else {
-      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, они примерно одинаковы.`;
-    }
-
-    return comparison;
-  }
-
-  /**
    * Сканирует соседние комнаты на наличие враждебных существ.
    * @returns {Array<{direction: string, hostiles: Array<{name: string, count: number}>}>}
    */
@@ -571,5 +514,16 @@ ${this.getCurrentRoom().getFullDescription(this)}
    */
   getAvailableActions() {
     return this.actionGenerator.getAvailableActions(); // Делегируем вызов
+  }
+
+  /**
+   * Генерирует подсказки для команд.
+   * @param {string|null} command - Текущая команда.
+   * @param {string} prefix - Текущий префикс для поиска.
+   * @returns {Array<{text: string, type: string}>}
+   */
+  getCommandSuggestions(command, prefix) {
+    // Делегируем вызов SuggestionGenerator
+    return this.suggestionGenerator.getSuggestions(command, prefix);
   }
 }
