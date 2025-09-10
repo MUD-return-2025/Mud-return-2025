@@ -278,7 +278,7 @@ onUnmounted(() => {
 
 <style scoped>
 .stats-panel {
-  position: fixed;
+  position: absolute;
   top: 20px;
   right: 20px;
   max-height: calc(100vh - 40px);
@@ -286,7 +286,7 @@ onUnmounted(() => {
   border: 2px solid #00ff00;
   font-family: 'Courier New', monospace;
   font-size: 12px;
-  z-index: 2001;
+  z-index: 1000;
   border-radius: 4px;
   overflow: hidden;
 }

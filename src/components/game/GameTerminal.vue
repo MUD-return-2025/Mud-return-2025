@@ -1,6 +1,9 @@
 <template>
   <div class="game-terminal" :class="{ fullscreen: isFullscreen }" @click="handlePanelClick">
     <div class="terminal-output" ref="outputElement" @click="handleOutputClick">
+      <div class="side-panels">
+        <PlayerStatsPanel @action-performed="refocusInput" />
+      </div>
       <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'" tabindex="-1">
         {{ isFullscreen ? '⤡' : '⛶' }}
       </button>
@@ -18,9 +21,6 @@
       :is-initialized="isInitialized"
       @process-command="processCommand"
     />
-    <div class="side-panels">
-      <PlayerStatsPanel @action-performed="refocusInput" />
-    </div>
   </div>
 </template>
 
@@ -122,7 +122,7 @@ onMounted(async () => {
   position: relative;
 }
 
-.game-terminal.fullscreen, .game-terminal.fullscreen .side-panels {
+.game-terminal.fullscreen {
   position: fixed;
   top: 0;
   left: 0;
@@ -133,8 +133,10 @@ onMounted(async () => {
 }
 
 .side-panels {
-  display: flex;
-  flex-direction: column;
+  position: absolute;
+  top: 0;
+  right: 0;
+  height: 100%;
 }
 
 .game-terminal.fullscreen .terminal-output {
