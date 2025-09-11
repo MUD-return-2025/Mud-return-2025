@@ -45,3 +45,67 @@ body {
   content: '_';
   animation: blink 1s infinite;
 }
+
+.app {
+  background: #000 !important;
+  color: #00ff00 !important;
+  font-family: 'Courier New', monospace;
+  text-shadow: 0 0 5px rgba(0, 255, 0, 0.5);
+}
+
+.scanline-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  background: linear-gradient(to bottom, rgba(255,255,255,0), rgba(255,255,255,0) 50%, rgba(0,0,0,0.1) 50%, rgba(0,0,0,0.1));
+  background-size: 100% 4px;
+  z-index: 100;
+  opacity: 0.3;
+}
+
+.game-header {
+  background: linear-gradient(135deg, #1a1a1a 0%, #2d2d2d 100%) !important;
+  border-bottom: 2px solid #00ff00 !important;
+  color: #00ff00 !important;
+}
+
+.header-title {
+  font-weight: bold;
+}
+
+.subtitle {
+  margin-right: 16px;
+  color: #888;
+  font-size: 14px;
+}
+
+.game-footer {
+  background-color: #1a1a1a !important;
+  border-top: 1px solid #333 !important;
+  font-size: 12px;
+  color: #888;
+  justify-content: center;
+}
+
+/* Text coloring classes */
+.info-label { color: #888888; }
+.user-input { color: #aaaaaa; }
+.room-name { color: #00ffff; font-weight: bold; }
+.exit-name { color: #ffff00; }
+.item-name { color: #ff00ff; }
+.npc-name.npc-friendly { color: #55ff55; }
+.npc-name.npc-hostile { color: #ff4444; font-weight: bold; }
+.npc-name.npc-neutral { color: #aaaaaa; }
+.npc-dead { color: #777777; font-style: italic; }
+.player-speech { color: #dddddd; font-style: italic; }
+.npc-speech { color: #aaffaa; }
+.combat-player-attack { color: #ffcc66; }
+.combat-npc-attack { color: #ff6666; }
+.combat-npc-death { color: #ff9999; font-weight: bold; }
+.combat-exp-gain { color: #66ff66; }
+.combat-player-hp { color: #cccccc; }
+.combat-player-death { color: #ff3333; font-weight: bold; }
+

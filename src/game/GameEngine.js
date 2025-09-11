@@ -259,6 +259,49 @@ export class GameEngine {
   // Вспомогательные методы
 
   /**
+   * Универсальный метод для поиска предмета или NPC по имени в различных локациях.
+   * Поиск производится в следующем порядке: инвентарь игрока, предметы в текущей комнате,
+   * предметы у торговца в текущей комнате, NPC в текущей комнате.
+   * @param {string} targetName - Имя цели для поиска.
+   * @returns {{type: 'item'|'npc', entity: object}|null} Объект с типом и найденной сущностью, или null если не найдено.
+   */
+  findTargetByName(targetName) {
+    if (!targetName) return null;
+
+    const lowerTargetName = targetName.toLowerCase();
+    const currentRoom = this.getCurrentRoom();
+    const [currentAreaId] = this.world.parseGlobalId(this.player.currentRoom);
+
+    // 1. Ищем предмет в инвентаре игрока
+    let item = this.player.findItem(lowerTargetName);
+    if (item) {
+      return { type: 'item', entity: item };
+    }
+
+    // 2. Ищем предмет в текущей комнате
+    const globalItemId = currentRoom.findItem(lowerTargetName, this);
+    if (globalItemId) {
+      item = this.world.items.get(globalItemId);
+      if (item) return { type: 'item', entity: item };
+    }
+
+    // 3. Ищем предмет у торговца в текущей комнате
+    item = this._findItemInTraderShop(lowerTargetName);
+    if (item) {
+      return { type: 'item', entity: item };
+    }
+
+    // 4. Ищем NPC в текущей комнате
+    const npcId = currentRoom.findNpc(lowerTargetName, this, currentAreaId);
+    if (npcId) {
+      const npc = this.getNpc(npcId, currentAreaId);
+      if (npc) return { type: 'npc', entity: npc };
+    }
+
+    return null; // Цель не найдена
+  }
+  
+  /**
    * Получает текущую локацию игрока
    * @returns {Room} объект локации
    */

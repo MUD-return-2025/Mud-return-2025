@@ -1,6 +1,26 @@
 import { DamageParser } from '../utils/damageParser.js';
 
 /**
+ * Конфигурация для оценки NPC. Пороги проверяются сверху вниз.
+ */
+const NPC_CONSIDER_THRESHOLDS = [
+  { threshold: 2.5, text: 'Легкая победа.', color: 'combat-exp-gain' },
+  { threshold: 1.5, text: 'Скорее всего, вы победите.', color: 'exit-name' },
+  { threshold: 0.9, text: 'Тяжелый бой, шансы равны.', color: 'combat-player-attack' },
+  { threshold: 0.6, text: 'Очень опасно, скорее всего, вы проиграете.', color: 'combat-npc-attack' },
+  { threshold: 0, text: 'Бегите! У вас нет шансов.', color: 'combat-player-death' },
+];
+
+/**
+ * Тексты и цвета для вердиктов сравнения экипировки.
+ */
+const EQUIPMENT_COMPARE_VERDICTS = {
+  better: { text: 'лучше', color: 'combat-exp-gain' },
+  worse: { text: 'хуже', color: 'combat-npc-death' },
+  equal: { text: 'В целом, они примерно одинаковы.' },
+};
+
+/**
  * @class ConsiderationManager
  * @description Управляет логикой оценки предметов и NPC.
  */
@@ -22,33 +42,20 @@ export class ConsiderationManager {
       return 'Что вы хотите оценить? (consider <предмет/нпс>)';
     }
 
-    const target = targetName.toLowerCase();
-    const currentRoom = this.game.getCurrentRoom();
+    const foundTarget = this.game.findTargetByName(targetName);
 
-    // 1. Проверяем предмет в инвентаре
-    let item = this.game.player.findItem(target);
-    if (item) return this._getConsiderItemString(item);
-
-    // 2. Проверяем предмет в комнате
-    const globalItemId = currentRoom.findItem(target, this.game);
-    if (globalItemId) {
-      item = this.game.world.items.get(globalItemId);
-      return this._getConsiderItemString(item);
+    if (!foundTarget) {
+      return `Вы не видите "${targetName}" здесь.`;
     }
 
-    // 3. Проверяем предмет у торговца
-    item = this.game._findItemInTraderShop(target);
-    if (item) return this._getConsiderItemString(item);
-
-    // 4. Проверяем NPC в комнате
-    const [currentAreaId] = this.game.world.parseGlobalId(this.game.player.currentRoom);
-    const npcId = currentRoom.findNpc(target, this.game, currentAreaId);
-    if (npcId) {
-      const npc = this.game.getNpc(npcId, currentAreaId);
-      return this._getConsiderNpcString(npc);
+    switch (foundTarget.type) {
+      case 'item':
+        return this._getConsiderItemString(foundTarget.entity);
+      case 'npc':
+        return this._getConsiderNpcString(foundTarget.entity);
+      default:
+        return `Вы не видите "${targetName}" здесь.`;
     }
-
-    return `Вы не видите "${targetName}" здесь.`;
   }
 
   /**
@@ -121,16 +128,13 @@ export class ConsiderationManager {
     lines.push(`  Раундов до поражения: ~${c(roundsToKillPlayer, 'combat-npc-attack')}`);
 
     const ratio = roundsToKillPlayer / roundsToKillNpc;
-    let conclusion = '';
-    let conclusionColor = 'npc-neutral';
+    
+    // Находим подходящий вердикт в конфигурации
+    const verdict = NPC_CONSIDER_THRESHOLDS.find(v => ratio >= v.threshold) 
+      || NPC_CONSIDER_THRESHOLDS[NPC_CONSIDER_THRESHOLDS.length - 1];
 
-    if (ratio > 2.5) { conclusion = 'Легкая победа.'; conclusionColor = 'combat-exp-gain'; }
-    else if (ratio > 1.5) { conclusion = 'Скорее всего, вы победите.'; conclusionColor = 'exit-name'; }
-    else if (ratio >= 0.9) { conclusion = 'Тяжелый бой, шансы равны.'; conclusionColor = 'combat-player-attack'; }
-    else if (ratio > 0.6) { conclusion = 'Очень опасно, скорее всего, вы проиграете.'; conclusionColor = 'combat-npc-attack'; }
-    else { conclusion = 'Бегите! У вас нет шансов.'; conclusionColor = 'combat-player-death'; }
+    lines.push(`\n${c('Вердикт:', 'exit-name')} ${c(verdict.text, verdict.color)}`);
 
-    lines.push(`\n${c('Вердикт:', 'exit-name')} ${c(conclusion, conclusionColor)}`);
     return [header, ...lines, footer].join('\n');
   }
 
@@ -168,12 +172,12 @@ export class ConsiderationManager {
       }
     };
 
-    if (newItem.type === 'weapon') {
+    if (newItem.damage && equippedItem.damage) {
       const newItemDamage = new DamageParser(newItem.damage).avg();
       const equippedItemDamage = new DamageParser(equippedItem.damage).avg();
       comparison += compareStat('Средний урон', newItemDamage, equippedItemDamage);
-    }    
-    if (newItem.type === 'armor') {
+    }
+    if (newItem.armor != null && equippedItem.armor != null) {
       comparison += compareStat('Защита', newItem.armor || 0, equippedItem.armor || 0);
     }
 
@@ -181,11 +185,14 @@ export class ConsiderationManager {
     comparison += `  Ценность: ${newItem.value || 0} (=)\n`;
 
     if (better > worse) {
-      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c('лучше', 'combat-exp-gain')}, чем то, что на вас надето.`;
+      const { text, color } = EQUIPMENT_COMPARE_VERDICTS.better;
+      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c(text, color)}, чем то, что на вас надето.`;
     } else if (worse > better) {
-      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c('хуже', 'combat-npc-death')}, чем то, что на вас надето.`;
+      const { text, color } = EQUIPMENT_COMPARE_VERDICTS.worse;
+      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c(text, color)}, чем то, что на вас надето.`;
     } else {
-      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, они примерно одинаковы.`;
+      const { text } = EQUIPMENT_COMPARE_VERDICTS.equal;
+      comparison += `\n${c('Вердикт:', 'exit-name')} ${text}`;
     }
 
     return comparison;
