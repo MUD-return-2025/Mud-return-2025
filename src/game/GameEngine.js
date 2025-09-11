@@ -7,6 +7,7 @@ import { DamageParser } from './utils/damageParser.js';
 import { TickManager } from './classes/TickManager.js';
 import { ConsiderationManager } from './classes/ConsiderationManager.js';
 import { SuggestionGenerator } from './classes/SuggestionGenerator.js';
+import { MessageFormatter } from './utils/MessageFormatter.js';
 import { ActionGenerator } from './classes/ActionGenerator.js';
 import commands from './commands/index.js';
 
@@ -30,6 +31,7 @@ export class GameEngine {
     this.tickManager = new TickManager(this);
     this.considerationManager = new ConsiderationManager(this);
     this.suggestionGenerator = new SuggestionGenerator(this);
+    this.formatter = new MessageFormatter(this.colorize);
     this.actionGenerator = new ActionGenerator(this);
 
     this.skillsData = new Map(); // Карта умений, ключ - ID умения
@@ -300,7 +302,7 @@ export class GameEngine {
 
     return null; // Цель не найдена
   }
-  
+
   /**
    * Получает текущую локацию игрока
    * @returns {Room} объект локации

@@ -39,18 +39,18 @@ export class ConsiderationManager {
    */
   consider(targetName) {
     if (!targetName) {
-      return 'Что вы хотите оценить? (consider <предмет/нпс>)';
+      return this.game.formatter.format('consider.general.prompt');
     }
 
     const foundTarget = this.game.findTargetByName(targetName);
 
     if (!foundTarget) {
-      return `Вы не видите "${targetName}" здесь.`;
+      return this.game.formatter.format('consider.general.notFound', { targetName });
     }
 
     switch (foundTarget.type) {
       case 'item':
-        return this._getConsiderItemString(foundTarget.entity);
+        return this._getConsiderItemString(foundTarget.entity, this.game.formatter);
       case 'npc':
         return this._getConsiderNpcString(foundTarget.entity);
       default:
@@ -61,26 +61,26 @@ export class ConsiderationManager {
   /**
    * Формирует строку с описанием и сравнением предмета.
    * @param {object} item - Предмет для оценки.
+   * @param {import('../utils/MessageFormatter').MessageFormatter} t - Экземпляр форматера.
    * @returns {string}
    * @private
    */
-  _getConsiderItemString(item) {
-    const c = this.game.colorize;
-    const header = c(`---[ Оценка: ${item.name} ]--------`, 'room-name');
-    const footer = c('------------------------------------', 'room-name');
+  _getConsiderItemString(item, t) {
+    const header = t.format('consider.item.header', { name: item.name });
+    const footer = t.format('consider.item.footer');
 
     const lines = [
-      c(item.description, 'npc-neutral'),
+      this.game.colorize(item.description, 'npc-neutral'),
       '',
-      c('Характеристики:', 'exit-name')
+      t.format('consider.item.statsHeader')
     ];
 
-    if (item.type) lines.push(`  Тип: ${c(item.type, 'item-name')}`);
-    if (item.damage) lines.push(`  ⚔️ Урон: ${c(item.damage, 'combat-player-attack')}`);
-    if (item.armor) lines.push(`  🛡️ Защита: ${c(item.armor, 'combat-exp-gain')}`);
-    if (item.healAmount) lines.push(`  ❤️ Лечение: ${c(item.healAmount, 'combat-exp-gain')}`);
-    if (item.weight) lines.push(`  ⚖️ Вес: ${c(item.weight, 'npc-neutral')}`);
-    if (item.value) lines.push(`  💰 Ценность: ${c(item.value, 'exit-name')} золота`);
+    if (item.type) lines.push(t.format('consider.item.type', { type: item.type }));
+    if (item.damage) lines.push(t.format('consider.item.damage', { damage: item.damage }));
+    if (item.armor) lines.push(t.format('consider.item.armor', { armor: item.armor }));
+    if (item.healAmount) lines.push(t.format('consider.item.healAmount', { healAmount: item.healAmount }));
+    if (item.weight) lines.push(t.format('consider.item.weight', { weight: item.weight }));
+    if (item.value) lines.push(t.format('consider.item.value', { value: item.value }));
 
     let result = [header, ...lines].join('\n');
     
@@ -101,14 +101,14 @@ export class ConsiderationManager {
    * @private
    */
   _getConsiderNpcString(npc) {
-    const c = this.game.colorize;
-    const header = c(`---[ Оценка: ${npc.name} ]--------`, 'room-name');
-    const footer = c('------------------------------------', 'room-name');
+    const t = this.game.formatter;
+    const header = t.format('consider.npc.header', { name: npc.name });
+    const footer = t.format('consider.npc.footer');
 
     const lines = [
-      c(npc.description, 'npc-neutral'),
+      this.game.colorize(npc.description, 'npc-neutral'),
       '',
-      c('Оценка сил:', 'exit-name')
+      t.format('consider.npc.statsHeader')
     ];
 
     const playerHp = this.game.player.hitPoints;
@@ -116,16 +116,16 @@ export class ConsiderationManager {
     const npcHp = npc.hitPoints;
     const npcAvgDamage = new DamageParser(npc.damage).avg();
 
-    if (playerAvgDamage <= 0) return [header, ...lines, '  Вы не можете нанести урон.', footer].join('\n');
-    if (npcAvgDamage <= 0) return [header, ...lines, `  Противник не может нанести урон. ${c('Легкая победа', 'combat-exp-gain')}.`, footer].join('\n');
+    if (playerAvgDamage <= 0) return [header, ...lines, t.format('consider.npc.cantDamage'), footer].join('\n');
+    if (npcAvgDamage <= 0) return [header, ...lines, t.format('consider.npc.npcCantDamage'), footer].join('\n');
 
     const roundsToKillNpc = Math.ceil(npcHp / playerAvgDamage);
     const roundsToKillPlayer = Math.ceil(playerHp / npcAvgDamage);
 
-    lines.push(`  Ваш урон/раунд (средний): ${c(playerAvgDamage.toFixed(1), 'combat-player-attack')}`);
-    lines.push(`  Урон врага/раунд (средний): ${c(npcAvgDamage.toFixed(1), 'combat-npc-attack')}`);
-    lines.push(`  Раундов до победы: ~${c(roundsToKillNpc, 'combat-player-attack')}`);
-    lines.push(`  Раундов до поражения: ~${c(roundsToKillPlayer, 'combat-npc-attack')}`);
+    lines.push(t.format('consider.npc.playerDamage', { damage: playerAvgDamage.toFixed(1) }));
+    lines.push(t.format('consider.npc.npcDamage', { damage: npcAvgDamage.toFixed(1) }));
+    lines.push(t.format('consider.npc.roundsToWin', { rounds: roundsToKillNpc }));
+    lines.push(t.format('consider.npc.roundsToLose', { rounds: roundsToKillPlayer }));
 
     const ratio = roundsToKillPlayer / roundsToKillNpc;
     
@@ -133,7 +133,8 @@ export class ConsiderationManager {
     const verdict = NPC_CONSIDER_THRESHOLDS.find(v => ratio >= v.threshold) 
       || NPC_CONSIDER_THRESHOLDS[NPC_CONSIDER_THRESHOLDS.length - 1];
 
-    lines.push(`\n${c('Вердикт:', 'exit-name')} ${c(verdict.text, verdict.color)}`);
+    const verdictText = this.game.colorize(verdict.text, verdict.color);
+    lines.push(t.format('consider.npc.verdict', { verdictText }));
 
     return [header, ...lines, footer].join('\n');
   }
@@ -147,12 +148,12 @@ export class ConsiderationManager {
    * @private
    */
   _compareEquipment(newItem, equippedItem, itemTypeName) {
-    const c = this.game.colorize;
+    const t = this.game.formatter;
     if (!equippedItem) {
-      return `\n\n${c('Сравнение:', 'exit-name')}\n  У вас не надето: ${itemTypeName}.`;
+      return t.format('consider.compare.noEquipped', { itemTypeName });
     }
 
-    let comparison = `\n\n${c('Сравнение с надетым', 'exit-name')} (${c(equippedItem.name, 'item-name')}):\n`;
+    let comparison = t.format('consider.compare.header', { equippedItemName: equippedItem.name });
     let better = 0;
     let worse = 0;
     
@@ -165,10 +166,12 @@ export class ConsiderationManager {
 
       if (isBetter) {
         better++;
-        return `  ${name}: ${newItemStat.toFixed(1)} (${c(diffStr, 'combat-exp-gain')})\n`;
+        const coloredDiff = this.game.colorize(diffStr, 'combat-exp-gain');
+        return t.format('consider.compare.statLine', { name, newItemStat: newItemStat.toFixed(1), diffStr: coloredDiff });
       } else {
         worse++;
-        return `  ${name}: ${newItemStat.toFixed(1)} (${c(diffStr, 'combat-npc-death')})\n`;
+        const coloredDiff = this.game.colorize(diffStr, 'combat-npc-death');
+        return t.format('consider.compare.statLine', { name, newItemStat: newItemStat.toFixed(1), diffStr: coloredDiff });
       }
     };
 
@@ -182,17 +185,17 @@ export class ConsiderationManager {
     }
 
     comparison += compareStat('Вес', newItem.weight || 0, equippedItem.weight || 0, true);
-    comparison += `  Ценность: ${newItem.value || 0} (=)\n`;
+    comparison += t.format('consider.compare.statLine', { name: 'Ценность', newItemStat: newItem.value || 0, diffStr: '=' });
 
     if (better > worse) {
-      const { text, color } = EQUIPMENT_COMPARE_VERDICTS.better;
-      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c(text, color)}, чем то, что на вас надето.`;
+      const text = t.format('consider.compare.verdictBetter');
+      comparison += t.format('consider.compare.verdict', { text });
     } else if (worse > better) {
-      const { text, color } = EQUIPMENT_COMPARE_VERDICTS.worse;
-      comparison += `\n${c('Вердикт:', 'exit-name')} В целом, это ${c(text, color)}, чем то, что на вас надето.`;
+      const text = t.format('consider.compare.verdictWorse');
+      comparison += t.format('consider.compare.verdict', { text });
     } else {
-      const { text } = EQUIPMENT_COMPARE_VERDICTS.equal;
-      comparison += `\n${c('Вердикт:', 'exit-name')} ${text}`;
+      const text = t.format('consider.compare.verdictEqual');
+      comparison += t.format('consider.compare.verdict', { text });
     }
 
     return comparison;
