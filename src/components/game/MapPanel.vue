@@ -272,15 +272,20 @@ const moveToRoom = async (localRoomId) => {
 .map-legend {
   margin-top: 15px;
   padding: 10px;
-  background-color: #1a1a1a;
-  border-radius: 5px;
+  background-color: #001a00;
+  border: 1px solid #004400;
+  border-radius: 3px;
   font-size: 11px;
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
 }
 
 .legend-item {
   display: flex;
   align-items: center;
-  margin-bottom: 5px;
 }
 
 .legend-color {

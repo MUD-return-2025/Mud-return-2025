@@ -1,6 +1,6 @@
 <script setup>
 // Компонент Vue для отображения панели статистики игрока, инвентаря, экипировки и карты.
-import { ref, watch, defineEmits, onUnmounted } from 'vue';
+import { ref, watch, defineEmits, onUnmounted, computed } from 'vue';
 import { useGameStore } from '../../stores/game.js';
 import EquipmentPanel from './EquipmentPanel.vue';
 import InventoryPanel from './InventoryPanel.vue';
@@ -9,6 +9,20 @@ import MapPanel from './MapPanel.vue';
 import RadarPanel from './RadarPanel.vue';
 
 const gameStore = useGameStore();
+
+/**
+ * @description Вычисляемое свойство для получения списка умений, требующих цели.
+ */
+const targetedSkills = computed(() => 
+  gameStore.learnedSkills.filter(skill => skill.target && skill.target !== 'none')
+);
+
+/**
+ * @description Вычисляемое свойство для получения списка умений, не требующих цели.
+ */
+const generalSkills = computed(() => 
+  gameStore.learnedSkills.filter(skill => !skill.target || skill.target === 'none')
+);
 
 // Определяем событие, которое компонент может генерировать
 const emit = defineEmits(['action-performed']);
@@ -185,9 +199,9 @@ onUnmounted(() => {
             <div class="stat-line">😊 Харизма: {{ gameStore.player.charisma }}</div>
           </div>
 
-          <div v-if="gameStore.learnedSkills.length > 0" class="stat-group">
+          <div v-if="targetedSkills.length > 0" class="stat-group">
             <h4>📚 Умения</h4>
-            <div v-for="skill in gameStore.learnedSkills" :key="skill.id" class="skill-item" :title="skill.description">
+            <div v-for="skill in targetedSkills" :key="skill.id" class="skill-item" :title="skill.description">
               <div class="skill-name">{{ skill.name }}</div>
               <div class="skill-actions">
                 <button
@@ -218,16 +232,27 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <div v-if="gameStore.healingPotion" class="stat-group">
+          <div v-if="gameStore.healingPotion || generalSkills.length > 0" class="stat-group">
             <h4>⚡ Быстрые действия</h4>
             <div class="quick-actions">
-              <button
+              <button v-if="gameStore.healingPotion"
                 class="action-btn"
                 @click="handleCommand(`use ${gameStore.healingPotion.name}`)"
                 :disabled="gameStore.player.hitPoints >= gameStore.player.maxHitPoints"
                 :title="gameStore.player.hitPoints >= gameStore.player.maxHitPoints ? 'Вы полностью здоровы' : `Использовать ${gameStore.healingPotion.name}`"
               >
                 💖 Лечиться ({{ gameStore.healingPotion.name }})
+              </button>
+              <button
+                v-for="skill in generalSkills"
+                :key="skill.id"
+                :class="['action-btn', { 'is-on-cooldown': gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0 }]"
+                @click="handleCommand(skill.id)"
+                :disabled="gameStore.player.stamina < skill.cost || (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0)"
+                :title="gameStore.player.stamina < skill.cost ? `Нужно выносливости: ${skill.cost}` : (gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0) ? `Перезарядка: ${gameStore.player.skillCooldowns[skill.id]}` : skill.description"
+              >
+                {{ skill.name }}
+                <span v-if="gameStore.player.skillCooldowns && gameStore.player.skillCooldowns[skill.id] > 0"> ({{ gameStore.player.skillCooldowns[skill.id] }})</span>
               </button>
             </div>
           </div>
