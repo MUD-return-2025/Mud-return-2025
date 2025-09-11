@@ -18,12 +18,7 @@ export default {
       return `У вас нет "${cmd.target}".`;
     }
 
-    if (item.type === 'weapon') {
-      return game.player.equipWeapon(item);
-    } else if (item.type === 'armor') {
-      return game.player.equipArmor(item);
-    } else {
-      return `${game.colorize(item.name, 'item-name')} нельзя экипировать.`;
-    }
+    // Новый универсальный метод сам проверяет тип предмета
+    return game.player.equip(item);
   }
 };

@@ -15,9 +15,9 @@ export default {
 
     const target = cmd.target.toLowerCase();
     if (target.includes('weapon') || target.includes('оружие')) {
-      return game.player.unequipWeapon();
+      return game.player.unequip('weapon');
     } else if (target.includes('armor') || target.includes('броня')) {
-      return game.player.unequipArmor();
+      return game.player.unequip('armor');
     } else {
       return 'Укажите "weapon" или "armor" для снятия экипировки.';
     }

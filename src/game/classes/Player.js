@@ -206,98 +206,71 @@ export class Player {
   }
 
   /**
-   * Экипирует оружие
-   * @param {Object} weapon - оружие для экипировки
-   * @returns {string} результат экипировки
+   * Экипирует предмет в соответствующий слот.
+   * @param {object} item - Предмет для экипировки.
+   * @returns {string} Результат действия.
    */
-  equipWeapon(weapon) {
-    if (weapon.type !== 'weapon') {
-      return `${weapon.name} не является оружием.`;
+  equip(item) {
+    const slotMapping = {
+      weapon: { name: 'Оружие', slot: 'equippedWeapon' },
+      armor: { name: 'Броня', slot: 'equippedArmor' },
+      // Сюда можно будет добавить другие слоты, например:
+      // shield: { name: 'Щит', slot: 'equippedShield' },
+    };
+
+    const mapping = slotMapping[item.type];
+    if (!mapping) {
+      return `${item.name} нельзя экипировать.`;
     }
 
-    // Проверяем, достаточно ли места для старого оружия, если оно есть
-    if (this.equippedWeapon && !this.canCarry(this.equippedWeapon)) {
-      return `Вы не можете экипировать ${weapon.name}, так как в инвентаре не хватит места для ${this.equippedWeapon.name}.`;
+    const equippedItem = this[mapping.slot];
+
+    // Проверяем, достаточно ли места для старого предмета, если он есть
+    if (equippedItem && !this.canCarry(equippedItem)) {
+      return `Вы не можете экипировать ${item.name}, так как в инвентаре не хватит места для ${equippedItem.name}.`;
     }
 
-    // Если уже есть экипированное оружие, возвращаем его в инвентарь.
+    // Если в слоте уже есть предмет, возвращаем его в инвентарь.
     let result = '';
-    if (this.equippedWeapon) {
-      this.addItem(this.equippedWeapon);
-      result += `Вы сняли ${this.equippedWeapon.name}. `;
+    if (equippedItem) {
+      this.addItem(equippedItem);
+      result += `Вы сняли ${equippedItem.name}. `;
     }
 
-    this.equippedWeapon = weapon;
-    // Удаляем новое оружие из инвентаря, так как оно теперь экипировано.
-    this.removeItem(weapon.globalId);
-    result += `Вы экипировали ${weapon.name}.`;
+    this[mapping.slot] = item;
+    // Удаляем новый предмет из инвентаря, так как он теперь экипирован.
+    this.removeItem(item.globalId);
+    result += `Вы экипировали ${item.name}.`;
     return result;
   }
 
   /**
-   * Экипирует броню
-   * @param {Object} armor - броня для экипировки
-   * @returns {string} результат экипировки
-   */
-  equipArmor(armor) {
-    if (armor.type !== 'armor') {
-      return `${armor.name} не является броней.`;
-    }
-
-    // Проверяем, достаточно ли места для старой брони, если она есть
-    if (this.equippedArmor && !this.canCarry(this.equippedArmor)) {
-      return `Вы не можете экипировать ${armor.name}, так как в инвентаре не хватит места для ${this.equippedArmor.name}.`;
-    }
-
-    // Аналогично оружию, возвращаем старую броню в инвентарь.
-    let result = '';
-    if (this.equippedArmor) {
-      this.addItem(this.equippedArmor);
-      result += `Вы сняли ${this.equippedArmor.name}. `;
-    }
-
-    this.equippedArmor = armor;
-    this.removeItem(armor.globalId);
-    result += `Вы экипировали ${armor.name}.`;
-    return result;
-  }
-
-  /**
-   * Снимает экипированное оружие и возвращает его в инвентарь.
+   * Снимает предмет из указанного слота и возвращает его в инвентарь.
+   * @param {'weapon' | 'armor'} slotType - Тип слота для снятия.
    * @returns {string} Сообщение о результате.
    */
-  unequipWeapon() {
-    if (!this.equippedWeapon) {
-      return 'У вас нет экипированного оружия.';
+  unequip(slotType) {
+    const slotMapping = {
+      weapon: { name: 'оружия', slot: 'equippedWeapon' },
+      armor: { name: 'брони', slot: 'equippedArmor' },
+    };
+
+    const mapping = slotMapping[slotType];
+    if (!mapping) return `Неизвестный тип экипировки: ${slotType}.`;
+
+    const equippedItem = this[mapping.slot];
+    if (!equippedItem) {
+      return `У вас нет экипированной ${mapping.name}.`;
     }
 
-    if (!this.canCarry(this.equippedWeapon)) {
-      return `Вы не можете снять ${this.equippedWeapon.name}, в инвентаре нет места.`;
+    if (!this.canCarry(equippedItem)) {
+      return `Вы не можете снять ${equippedItem.name}, в инвентаре нет места.`;
     }
 
-    this.addItem(this.equippedWeapon);
-    const weaponName = this.equippedWeapon.name;
-    this.equippedWeapon = null;
-    return `Вы сняли ${weaponName}.`;
-  }
-
-  /**
-   * Снимает экипированную броню и возвращает ее в инвентарь.
-   * @returns {string} Сообщение о результате.
-   */
-  unequipArmor() {
-    if (!this.equippedArmor) {
-      return 'У вас нет экипированной брони.';
-    }
-
-    if (!this.canCarry(this.equippedArmor)) {
-      return `Вы не можете снять ${this.equippedArmor.name}, в инвентаре нет места.`;
-    }
-
-    this.addItem(this.equippedArmor);
-    const armorName = this.equippedArmor.name;
-    this.equippedArmor = null;
-    return `Вы сняли ${armorName}.`;
+    this.addItem(equippedItem);
+    const itemName = equippedItem.name;
+    this[mapping.slot] = null;
+    return `Вы сняли ${itemName}.`;
   }
 
   /**
@@ -328,5 +301,26 @@ export class Player {
     const dexBonus = Math.floor((this.dexterity - 10) / 2);
     const armorBonus = this.getArmorDefenseBonus();
     return 10 + dexBonus + armorBonus;
+  }
+
+  /**
+   * Рассчитывает средний урон игрока для оценки.
+   * @returns {number}
+   */
+  getAverageDamage() {
+    // Базовый урон 1d4 без оружия
+    let avgDamage = 2.5;
+    
+    // Бонус от силы
+    const strBonus = Math.floor((this.strength - 10) / 2);
+    
+    // Бонус от оружия
+    if (this.equippedWeapon && this.equippedWeapon.damage) {
+      avgDamage = new DamageParser(this.equippedWeapon.damage).avg() + strBonus;
+    } else {
+      avgDamage += strBonus;
+    }
+    
+    return Math.max(1, avgDamage);
   }
 }

@@ -200,28 +200,6 @@ export class GameEngine {
   }
 
   /**
-   * Рассчитывает средний урон игрока.
-   * @returns {number}
-   * @private
-   */
-  _calculateAvgPlayerDamage() {
-    // Базовый урон 1d6 без оружия
-    let avgDamage = 3.5;
-    
-    // Бонус от силы
-    const strBonus = Math.floor((this.player.strength - 10) / 2);
-    
-    // Бонус от оружия
-    if (this.player.equippedWeapon && this.player.equippedWeapon.damage) {
-      avgDamage = new DamageParser(this.player.equippedWeapon.damage).avg() + strBonus;
-    } else {
-      avgDamage += strBonus;
-    }
-    
-    return Math.max(1, avgDamage);
-  }
-
-  /**
    * Сканирует соседние комнаты на наличие враждебных существ.
    * @returns {Array<{direction: string, hostiles: Array<{name: string, count: number}>}>}
    */

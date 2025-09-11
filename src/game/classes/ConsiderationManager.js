@@ -112,7 +112,7 @@ export class ConsiderationManager {
     ];
 
     const playerHp = this.game.player.hitPoints;
-    const playerAvgDamage = this.game._calculateAvgPlayerDamage();
+    const playerAvgDamage = this.game.player.getAverageDamage();
     const npcHp = npc.hitPoints;
     const npcAvgDamage = new DamageParser(npc.damage).avg();
 
