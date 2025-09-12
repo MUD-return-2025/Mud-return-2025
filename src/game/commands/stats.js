@@ -37,19 +37,19 @@ export default {
     const footer = c('------------------------------------', 'room-name');
 
     const lines = [
-      `  ${c('Уровень:'.padEnd(15), 'item-name')} ${p.level}`,
-      `  ${c('Опыт:'.padEnd(15), 'item-name')} [${expBar}] ${p.experience}/${p.experienceToNext}`,
-      `  ${c('Здоровье:'.padEnd(15), 'item-name')} [${hpBar}] ${p.hitPoints}/${p.maxHitPoints}`,
-      `  ${c('Выносливость:'.padEnd(15), 'item-name')} [${staminaBar}] ${p.stamina}/${p.maxStamina}`,
+      `  ${c('Уровень:'.padEnd(15), 'info-label')} ${p.level}`,
+      `  ${c('Опыт:'.padEnd(15), 'info-label')} [${expBar}] ${p.experience}/${p.experienceToNext}`,
+      `  ${c('Здоровье:'.padEnd(15), 'info-label')} [${hpBar}] ${p.hitPoints}/${p.maxHitPoints}`,
+      `  ${c('Выносливость:'.padEnd(15), 'info-label')} [${staminaBar}] ${p.stamina}/${p.maxStamina}`,
       ``,
-      `  💪 ${c('Сила:'.padEnd(13), 'item-name')} ${p.strength}`,
-      `  ⚡ ${c('Ловкость:'.padEnd(13), 'item-name')} ${p.dexterity}`,
-      `  🛡️ ${c('Телосложение:'.padEnd(13), 'item-name')} ${p.constitution}`,
-      `  🧠 ${c('Интеллект:'.padEnd(13), 'item-name')} ${p.intelligence}`,
-      `  🔮 ${c('Мудрость:'.padEnd(13), 'item-name')} ${p.wisdom}`,
-      `  😊 ${c('Харизма:'.padEnd(13), 'item-name')} ${p.charisma}`,
+      `  💪 ${c('Сила:'.padEnd(13), 'info-label')} ${p.strength}`,
+      `  ⚡ ${c('Ловкость:'.padEnd(13), 'info-label')} ${p.dexterity}`,
+      `  🛡️ ${c('Телосложение:'.padEnd(13), 'info-label')} ${p.constitution}`,
+      `  🧠 ${c('Интеллект:'.padEnd(13), 'info-label')} ${p.intelligence}`,
+      `  🔮 ${c('Мудрость:'.padEnd(13), 'info-label')} ${p.wisdom}`,
+      `  😊 ${c('Харизма:'.padEnd(13), 'info-label')} ${p.charisma}`,
       ``,
-      `  💰 ${c('Золото:'.padEnd(14), 'item-name')} ${p.gold}`,
+      `  💰 ${c('Золото:'.padEnd(14), 'info-label')} ${p.gold}`,
       ``,
       `  Состояние: ${stateText}`
     ];

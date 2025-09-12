@@ -126,7 +126,7 @@ export class CommandManager {
     this.commands.forEach((cmd, name) => {
       const coloredName = c(name, 'exit-name');
       const padding = ' '.repeat(maxCmdLength - name.length);
-      const aliases = cmd.aliases.length > 0 ? ` (${c('синонимы', 'item-name')}: ${cmd.aliases.join(', ')})` : '';
+      const aliases = cmd.aliases.length > 0 ? ` (${c('синонимы', 'info-label')}: ${cmd.aliases.join(', ')})` : '';
       commandList.push(`  ${coloredName}${padding} - ${cmd.description}${aliases}`);
     });
 

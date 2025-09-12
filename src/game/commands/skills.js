@@ -40,7 +40,7 @@ export default {
     lines.push(c('Доступные для изучения умения:', 'exit-name'));
     if (availableSkills.length > 0) {
       availableSkills.forEach(skill => {
-        lines.push(`  - ${c(skill.name, 'npc-neutral')} (на ${c(skill.level, 'combat-exp-gain')} уровне)`);
+        lines.push(`  - ${c(skill.name, 'player-speech')} (на ${c(skill.level, 'combat-exp-gain')} уровне)`);
         lines.push(`    ${c(skill.description, 'npc-neutral')}`);
       });
     } else {
