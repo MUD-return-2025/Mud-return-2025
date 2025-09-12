@@ -15,5 +15,52 @@
     "cost": 50,
     "cooldown": 10,
     "target": "none"
+  },
+  "power_strike": {
+    "name": "Усиленный удар",
+    "level": 4,
+    "description": "Мощный удар, наносящий двойной урон. Стоимость: 20 выносливости. Перезарядка: 3 раунда.",
+    "damageMultiplier": 2.0,
+    "cost": 20,
+    "cooldown": 3,
+    "target": "npc"
+  },
+  "parry": {
+    "name": "Парирование",
+    "level": 5,
+    "description": "Пассивный шанс (15%) полностью заблокировать атаку противника в ближнем бою.",
+    "passive": true,
+    "effect": { "parryChance": 0.15 }
+  },
+  "second_wind": {
+    "name": "Второе дыхание",
+    "level": 6,
+    "description": "Восстанавливает 50% максимальной выносливости. Можно использовать только вне боя. Перезарядка: 120 сек.",
+    "cost": 0,
+    "cooldown": 120,
+    "target": "none",
+    "effect": { "staminaRestorePercent": 0.5 }
+  },
+  "blind_rage": {
+    "name": "Слепая ярость",
+    "level": 7,
+    "description": "На 3 раунда вы получаете +25% к урону, но ваша защита снижается на 25%.",
+    "cost": 25,
+    "cooldown": 10,
+    "target": "none"
+  },
+  "improved_assessment": {
+    "name": "Улучшенная оценка",
+    "level": 8,
+    "description": "Пассивно. Команда 'consider' теперь показывает точное здоровье противников.",
+    "passive": true
+  },
+  "disarm": {
+    "name": "Обезоруживание",
+    "level": 9,
+    "description": "Попытка выбить оружие из рук противника. Шанс успеха зависит от вашей ловкости.",
+    "cost": 30,
+    "cooldown": 8,
+    "target": "npc"
   }
 }

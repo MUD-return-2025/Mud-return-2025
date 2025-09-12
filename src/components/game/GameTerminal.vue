@@ -1,26 +1,28 @@
 <template>
-  <div class="game-terminal" :class="{ fullscreen: isFullscreen }" @click="handlePanelClick">
-    <div class="side-panels">
-      <PlayerStatsPanel @action-performed="refocusInput" />
-    </div>
-    <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'" tabindex="-1">
-      {{ isFullscreen ? '⤡' : '⛶' }}
-    </button>
-    <div class="terminal-output" ref="outputElement" @click="handleOutputClick">
-      <div v-if="!gameStore.gameStarted" class="welcome-message">
-        <p>🏰 Добро пожаловать в Мидгард! 🏰</p>
-        <p>Введите "new" для начала новой игры или "load" для загрузки сохранения.</p>
+  <div class="game-terminal" :style="{ flexDirection: panelSide === 'left' ? 'row' : 'row-reverse' }" :class="{ fullscreen: isFullscreen }">
+    <PlayerStatsPanel @action-performed="refocusInput" @position-changed="onPanelPositionChange" />
+    <div class="terminal-main-area">
+      <button @click.stop="toggleFullscreen" class="fullscreen-btn" :title="isFullscreen ? 'Свернуть' : 'Во весь экран'"
+        tabindex="-1">
+        <span v-if="isFullscreen" class="icon-fullscreen-exit">⤡</span>
+        <span v-else class="icon-fullscreen">⛶</span>
+      </button>
+      <div class="terminal-output" ref="outputElement" @click="handleOutputClick">
+        <div v-if="!gameStore.gameStarted" class="welcome-message">
+          <p>🏰 Добро пожаловать в Мидгард! 🏰</p>
+          <p>Введите "new" для начала новой игры или "load" для загрузки сохранения.</p>
+        </div>
+        <div v-for="(message, index) in gameStore.messages" :key="index" class="message" v-html="message">
+        </div>
       </div>
-      <div v-for="(message, index) in gameStore.messages" :key="index" class="message" v-html="message">
-      </div>
+   
+      <TerminalInput
+        ref="terminalInputRef"
+        :command-history="commandHistory"
+        :is-initialized="isInitialized"
+        @process-command="processCommand"
+      />
     </div>
-
-    <TerminalInput
-      ref="terminalInputRef"
-      :command-history="commandHistory"
-      :is-initialized="isInitialized"
-      @process-command="processCommand"
-    />
   </div>
 </template>
 
@@ -30,16 +32,20 @@ import { useGameStore } from '../../stores/game.js';
 import PlayerStatsPanel from './PlayerStatsPanel.vue';
 import TerminalInput from './TerminalInput.vue';
 
+const emit = defineEmits(['toggle-fullscreen']);
+
 /** @type {import('vue').Ref<string[]>} История введенных команд. */
 const commandHistory = ref([]);
 /** @type {import('vue').Ref<HTMLElement|null>} Ссылка на DOM-элемент вывода терминала. */
 const outputElement = ref(null);
 /** @type {import('vue').Ref<InstanceType<typeof TerminalInput>|null>} Ссылка на компонент ввода. */
 const terminalInputRef = ref(null);
-/** @type {import('vue').Ref<boolean>} Флаг полноэкранного режима. */
-const isFullscreen = ref(false);
 /** @type {import('vue').Ref<boolean>} Флаг, что движок и хранилище инициализированы. */
 const isInitialized = ref(false);
+/** @type {import('vue').Ref<boolean>} Флаг полноэкранного режима. */
+const isFullscreen = ref(false);
+/** @type {import('vue').Ref<'left' | 'right'>} */
+const panelSide = ref('left');
 
 const gameStore = useGameStore();
 
@@ -61,10 +67,18 @@ const refocusInput = () => {
 };
 
 /**
+ * @param {'left' | 'right'} side
+ */
+const onPanelPositionChange = (side) => {
+  panelSide.value = side;
+};
+
+/**
  * Переключает полноэкранный режим терминала.
  */
 const toggleFullscreen = () => {
   isFullscreen.value = !isFullscreen.value;
+  emit('toggle-fullscreen', isFullscreen.value);
   // Возвращаем фокус на поле ввода после изменения DOM
   nextTick(refocusInput);
 };
@@ -114,8 +128,8 @@ onMounted(async () => {
 <style scoped>
 .game-terminal {
   display: flex;
-  flex-direction: column;
-  height: calc(100vh - 120px);
+  flex-direction: row;
+  height: calc(100vh - (var(--v-layout-top) + var(--v-layout-bottom)));
   background-color: #000;
   border: 2px solid #00ff00;
   font-family: 'Courier New', monospace;
@@ -132,12 +146,16 @@ onMounted(async () => {
   border: none;
 }
 
-.side-panels {
-  /* Этот блок теперь позиционируется относительно .game-terminal */
+.game-terminal.fullscreen .fullscreen-btn {
+  right: 20px; /* Сдвигаем кнопку левее */
 }
 
-.game-terminal.fullscreen .terminal-output {
-  height: calc(100% - 42px); /* Full height minus input bar */
+.terminal-main-area {
+  display: flex;
+  flex-direction: column;
+  flex-grow: 1;
+  position: relative; /* Для позиционирования кнопки */
+  min-width: 0; /* Предотвращает выход за пределы flex-контейнера */
 }
 
 .terminal-output {
@@ -150,11 +168,10 @@ onMounted(async () => {
   font-size: 14px;
   line-height: 1.4;
 }
-
 .fullscreen-btn {
   position: absolute;
-  top: 5px;
-  right: 5px;
+  top: 10px;
+  right: 10px;
   background: #002200;
   border: 1px solid #00ff00;
   color: #00ff00;
@@ -168,6 +185,15 @@ onMounted(async () => {
   justify-content: center;
   line-height: 1;
   padding: 0;
+}
+
+.icon-fullscreen, .icon-fullscreen-exit {
+  display: block;
+  line-height: 1;
+}
+
+.icon-fullscreen-exit {
+  transform: rotate(180deg);
 }
 
 .fullscreen-btn:hover {

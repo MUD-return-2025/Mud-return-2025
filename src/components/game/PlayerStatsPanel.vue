@@ -25,7 +25,7 @@ const generalSkills = computed(() =>
 );
 
 // Определяем событие, которое компонент может генерировать
-const emit = defineEmits(['action-performed']);
+const emit = defineEmits(['action-performed', 'position-changed']);
 
 /**
  * Отслеживает изменение состояния игрока.
@@ -43,6 +43,8 @@ const isExpanded = ref(true);
 const activeTab = ref('stats');
 /** @type {import('vue').Ref<number>} Ширина панели в пикселях */
 const panelWidth = ref(400);
+/** @type {import('vue').Ref<'left' | 'right'>} Позиция панели */
+const panelSide = ref('left');
 
 /**
  * Начинает процесс изменения размера панели.
@@ -64,8 +66,9 @@ const startResize = (event) => {
  * @param {MouseEvent} event
  */
 const resizePanel = (event) => {
-  // Ширина = (ширина окна - координата X курсора)
-  const newWidth = window.innerWidth - event.clientX;
+  const newWidth = panelSide.value === 'left'
+    ? event.clientX
+    : window.innerWidth - event.clientX;
   // Ограничиваем минимальную и максимальную ширину
   panelWidth.value = Math.max(300, Math.min(newWidth, 800));
 };
@@ -101,6 +104,14 @@ const handleCommand = (command) => {
 };
 
 /**
+ * Переключает сторону расположения панели.
+ */
+const toggleSide = () => {
+  panelSide.value = panelSide.value === 'left' ? 'right' : 'left';
+  emit('position-changed', panelSide.value);
+};
+
+/**
  * Переключает состояние панели (свернута/развернута).
  */
 const togglePanel = () => {
@@ -118,12 +129,15 @@ onUnmounted(() => {
 
 <template>
   <div class="stats-panel" v-if="gameStore.gameStarted" :style="{ width: panelWidth + 'px' }">
-    <div class="resizer" @mousedown.prevent="startResize"></div>
+    <div class="resizer" :class="`resizer-${panelSide}`" @mousedown.prevent="startResize"></div>
     <div class="panel-header">
       <h3>📊 {{ gameStore.player.name }}</h3>
-      <button @click="togglePanel" class="toggle-btn">
-        {{ isExpanded ? '−' : '+' }}
-      </button>
+      <div class="panel-controls">
+        <button @click="toggleSide" class="toggle-btn" title="Сменить положение панели">↔</button>
+        <button @click="togglePanel" class="toggle-btn" :title="isExpanded ? 'Свернуть' : 'Развернуть'">
+          {{ isExpanded ? '−' : '+' }}
+        </button>
+      </div>
     </div>
 
     <div v-if="isExpanded" class="panel-content">
@@ -303,27 +317,32 @@ onUnmounted(() => {
 
 <style scoped>
 .stats-panel {
-  position: absolute;
-  top: 20px;
-  right: 20px;
   max-height: calc(100vh - 40px);
   background-color: #001100;
   border: 2px solid #00ff00;
   font-family: 'Courier New', monospace;
   font-size: 12px;
-  z-index: 1000;
+  position: relative; /* Для resizer */
+  flex-shrink: 0; /* Не сжиматься */
   border-radius: 4px;
   overflow: hidden;
 }
 
 .resizer {
-  position: absolute;
-  left: -3px;
   top: 0;
   bottom: 0;
   width: 6px;
   cursor: col-resize;
   z-index: 10;
+  position: absolute;
+}
+
+.resizer-left {
+  right: -3px;
+}
+
+.resizer-right {
+  left: -3px;
 }
 
 .panel-header {
@@ -341,12 +360,20 @@ onUnmounted(() => {
   font-size: 14px;
 }
 
+.panel-controls {
+  display: flex;
+  gap: 5px;
+}
+
 .toggle-btn {
   background: transparent;
   border: 1px solid #00ff00;
   color: #00ff00;
   width: 25px;
   height: 25px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   cursor: pointer;
   font-family: 'Courier New', monospace;
   font-size: 14px;

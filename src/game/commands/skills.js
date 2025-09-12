@@ -16,36 +16,33 @@ export default {
     const footer = c('------------------------------------', 'room-name');
     const lines = [];
 
+    const allSkills = Array.from(game.skillsData.values()).sort((a, b) => a.level - b.level);
+    const learnedSkills = allSkills.filter(skill => p.hasSkill(skill.id));
+    const availableSkills = allSkills.filter(skill => !p.hasSkill(skill.id));
+
     // Изученные умения
     lines.push(c('Изученные умения:', 'exit-name'));
-    if (p.skills.length === 0) {
+    if (learnedSkills.length === 0) {
       lines.push('  У вас пока нет изученных умений.');
     } else {
-      p.skills.forEach(skillId => {
-        const skillData = game.skillsData.get(skillId);
-        if (skillData) {
-          const cooldown = p.skillCooldowns[skillId] > 0 ? c(` (перезарядка: ${p.skillCooldowns[skillId]})`, 'combat-npc-death') : '';
-          lines.push(`  - ${c(skillData.name, 'item-name')}${cooldown}`);
-        }
+      learnedSkills.forEach(skill => {
+        const cooldown = p.skillCooldowns[skill.id] > 0 
+          ? c(` (перезарядка: ${p.skillCooldowns[skill.id]} сек)`, 'combat-npc-death') 
+          : '';
+        lines.push(`  - ${c(skill.name, 'item-name')}${cooldown}`);
+        lines.push(`    ${c(skill.description, 'npc-neutral')}`);
       });
     }
 
     lines.push('');
 
-    // Следующее умение для изучения
-    let nextSkill = null;
-    let minLevel = Infinity;
-
-    for (const skillData of game.skillsData.values()) {
-      if (skillData.level > p.level && skillData.level < minLevel) {
-        minLevel = skillData.level;
-        nextSkill = skillData;
-      }
-    }
-
-    lines.push(c('Ближайшее умение:', 'exit-name'));
-    if (nextSkill) {
-      lines.push(`  - ${c(nextSkill.name, 'item-name')} (на ${c(nextSkill.level, 'combat-exp-gain')} уровне)`);
+    // Доступные для изучения умения
+    lines.push(c('Доступные для изучения умения:', 'exit-name'));
+    if (availableSkills.length > 0) {
+      availableSkills.forEach(skill => {
+        lines.push(`  - ${c(skill.name, 'npc-neutral')} (на ${c(skill.level, 'combat-exp-gain')} уровне)`);
+        lines.push(`    ${c(skill.description, 'npc-neutral')}`);
+      });
     } else {
       lines.push('  Вы изучили все доступные умения.');
     }

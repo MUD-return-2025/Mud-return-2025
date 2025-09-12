@@ -1,6 +1,6 @@
 
 <template>
-  <v-theme-provider theme="dark" with-background class="app">
+  <v-theme-provider theme="dark" with-background class="app" :class="{ 'terminal-fullscreen-active': isFullscreen }">
     <v-app>
       <div class="scanline-overlay"></div>
       <v-app-bar density="compact" class="game-header">
@@ -13,7 +13,7 @@
       </v-app-bar>
 
       <v-main>
-        <GameTerminal />
+        <GameTerminal @toggle-fullscreen="handleToggleFullscreen" />
       </v-main>
 
       <v-footer app class="game-footer">
@@ -25,6 +25,19 @@
 
 <script setup>
 import GameTerminal from './components/game/GameTerminal.vue';
+import { ref } from 'vue';
+
+const isFullscreen = ref(false);
+
+const handleToggleFullscreen = (value) => {
+  isFullscreen.value = value;
+};
 </script>
 
-<style scoped></style>
+<style>
+/* Стили для полноэкранного режима */
+.terminal-fullscreen-active .game-header,
+.terminal-fullscreen-active .game-footer {
+  display: none !important;
+}
+</style>
