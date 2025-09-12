@@ -209,9 +209,12 @@ const moveToRoom = async (localRoomId) => {
 
 .map-room.active {
   background-color: #00ff00;
-  color: #000;
   border-color: #00ff00;
   box-shadow: 0 0 10px #00ff00;
+}
+
+.map-room.active .room-name {
+  color: #002200; /* Применяем цвет напрямую к тексту в активной комнате */
 }
 
 .map-room.available {
