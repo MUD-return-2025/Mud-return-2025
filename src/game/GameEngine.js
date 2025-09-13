@@ -3,10 +3,10 @@ import { Player } from './classes/Player.js';
 import { WorldManager } from './classes/WorldManager.js';
 import { CombatManager } from './classes/CombatManager.js';
 import { CommandManager } from './classes/CommandManager.js';
-import { DamageParser } from './utils/damageParser.js';
 import { TickManager } from './classes/TickManager.js';
 import { ConsiderationManager } from './classes/ConsiderationManager.js';
 import { SuggestionGenerator } from './classes/SuggestionGenerator.js';
+import { SaveManager } from './classes/SaveManager.js';
 import { MessageFormatter } from './utils/MessageFormatter.js';
 import { ActionGenerator } from './classes/ActionGenerator.js';
 import commands from './commands/index.js';
@@ -39,6 +39,8 @@ export class GameEngine {
     this.suggestionGenerator = new SuggestionGenerator(this);
     /** @type {MessageFormatter} Форматировщик сообщений для вывода в терминал. */
     this.formatter = new MessageFormatter(this.colorize);
+    /** @type {SaveManager} Менеджер для сохранения и загрузки игры. */
+    this.saveManager = new SaveManager(this);
     /** @type {ActionGenerator} Генератор доступных действий для UI. */
     this.actionGenerator = new ActionGenerator(this);
 
@@ -342,54 +344,7 @@ export class GameEngine {
    * @returns {void}
    */
   saveGame() {
-    const gameData = {
-      player: {
-        name: this.player.name,
-        level: this.player.level,
-        experience: this.player.experience,
-        experienceToNext: this.player.experienceToNext,
-        hitPoints: this.player.hitPoints,
-        maxHitPoints: this.player.maxHitPoints,
-        strength: this.player.strength,
-        dexterity: this.player.dexterity,
-        constitution: this.player.constitution,
-        intelligence: this.player.intelligence,
-        wisdom: this.player.wisdom,
-        charisma: this.player.charisma,
-        inventory: this.player.inventory,
-        gold: this.player.gold,
-        currentRoom: this.player.currentRoom,
-        state: this.player.state,
-        equippedWeapon: this.player.equippedWeapon,
-        equippedArmor: this.player.equippedArmor,
-        skills: Array.from(this.player.skills),
-        deathRoom: this.player.deathRoom,
-        ui_version: this.player.ui_version || 0
-      },
-      loadedAreaIds: Array.from(this.world.loadedAreaIds),
-      worldState: {
-        npcs: {},
-        rooms: {},
-        npcLocations: Array.from(this.world.npcLocationMap.entries()),
-      },
-      timestamp: Date.now()
-    };
-    
-    // Сохраняем состояние каждого NPC (только то, что меняется)
-    for (const [globalNpcId, npc] of this.world.npcs.entries()) {
-      gameData.worldState.npcs[globalNpcId] = {
-        hitPoints: npc.hitPoints,
-      };
-    }
-
-    // Сохраняем состояние каждой комнаты (только то, что меняется)
-    for (const [globalRoomId, room] of this.world.rooms.entries()) {
-      gameData.worldState.rooms[globalRoomId] = {
-        items: room.items,
-      };
-    }
-
-    localStorage.setItem('mudgame_save', JSON.stringify(gameData));
+    this.saveManager.saveGame();
   }
 
   /**
@@ -397,63 +352,17 @@ export class GameEngine {
    * @returns {Promise<boolean>} `true` в случае успешной загрузки, иначе `false`.
    */
   async loadGame() {
-    const saveData = localStorage.getItem('mudgame_save');
-    if (!saveData) {
-      return false;
-    }
-    
-    try {
-      const gameData = JSON.parse(saveData);
-      
-      this._resetWorldState();
-
-      await this.initializeSkills();
-
-      // Загружаем все зоны, которые были активны в сохраненной игре
-      for (const areaId of gameData.loadedAreaIds) {
-        await this.world.loadArea(areaId);
-      }
-
-      this.player.load(gameData.player);
-      
-      // Применяем сохраненное состояние мира поверх стандартного
-      if (gameData.worldState) {
-        // Восстанавливаем состояние NPC
-        if (gameData.worldState.npcs) {
-          for (const [globalNpcId, npcState] of Object.entries(gameData.worldState.npcs)) {
-            const npc = this.world.npcs.get(globalNpcId);
-            if (npc) {
-              npc.hitPoints = npcState.hitPoints;
-            }
-          }
-        }
-        // Восстанавливаем состояние комнат (предметы на полу)
-        if (gameData.worldState.rooms) {
-          for (const [globalRoomId, roomState] of Object.entries(gameData.worldState.rooms)) {
-            const room = this.world.rooms.get(globalRoomId);
-            if (room) {
-              room.items = roomState.items;
-            }
-          }
-        }
-        // Восстанавливаем карту расположения NPC
-        this.world.npcLocationMap = new Map(gameData.worldState.npcLocations || []);
-        this.world.syncRoomsFromNpcMap();
-      }
-
+    const loaded = await this.saveManager.loadGame();
+    if (loaded) {
       // Сбрасываем временные состояния игрока, которые не должны сохраняться
       if (this.player.state === 'fighting') {
         this.player.state = 'idle';
       }
-      
+
       this.gameState = 'menu';
       this.gameState = 'playing';
-
-      return true;
-    } catch (error) {
-      console.error('Ошибка загрузки:', error);
-      return false;
     }
+    return loaded;
   }
 
   /**

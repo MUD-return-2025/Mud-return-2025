@@ -299,6 +299,7 @@ npc_damage = roll(npc.damage);
   - `CommandManager`
   - `TickManager`
   - `CombatManager`
+  - `SaveManager`
   - `ActionGenerator`
 
 > Архитектура позволяет легко масштабировать и поддерживать проект.

@@ -1,5 +1,3 @@
-import { DamageParser } from '../utils/damageParser.js';
-
 /**
  * @class CombatManager
  * @description Управляет логикой одного боевого столкновения.
