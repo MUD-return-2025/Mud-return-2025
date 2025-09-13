@@ -12,8 +12,8 @@ import { ActionGenerator } from './classes/ActionGenerator.js';
 import commands from './commands/index.js';
 
 /**
- * Основной игровой движок
- * Управляет состоянием игры, обработкой команд и игровой логикой
+ * Основной игровой движок.
+ * Управляет состоянием игры, обработкой команд и всей игровой логикой. Является центральным координатором для всех менеджеров.
  */
 export class GameEngine {
   /**
@@ -25,20 +25,33 @@ export class GameEngine {
   colorize = (text, className) => `<span class="${className}">${text}</span>`;
 
   constructor() {
+    /** @type {Player} Экземпляр класса игрока. */
     this.player = new Player();
+    /** @type {WorldManager} Менеджер, управляющий игровым миром. */
     this.world = new WorldManager(this);
+    /** @type {CommandManager} Менеджер для обработки команд. */
     this.commandManager = new CommandManager(this);
+    /** @type {TickManager} Менеджер для обработки событий, происходящих с течением времени. */
     this.tickManager = new TickManager(this);
+    /** @type {ConsiderationManager} Менеджер для оценки целей. */
     this.considerationManager = new ConsiderationManager(this);
+    /** @type {SuggestionGenerator} Генератор подсказок для ввода команд. */
     this.suggestionGenerator = new SuggestionGenerator(this);
+    /** @type {MessageFormatter} Форматировщик сообщений для вывода в терминал. */
     this.formatter = new MessageFormatter(this.colorize);
+    /** @type {ActionGenerator} Генератор доступных действий для UI. */
     this.actionGenerator = new ActionGenerator(this);
 
+    /** @type {Map<string, object>} Карта данных об умениях, где ключ - ID умения. */
     this.skillsData = new Map(); // Карта умений, ключ - ID умения
 
+    /** @type {string[]} История сообщений для вывода в терминал. */
     this.messageHistory = []; // История сообщений для вывода в терминал
+    /** @type {'menu'|'playing'|'paused'} Текущее состояние игры. */
     this.gameState = 'menu'; // Состояние игры: menu, playing, paused
+    /** @type {CombatManager|null} Менеджер текущего боя. Null, если боя нет. */
     this.combatManager = null; // Менеджер текущего боя
+    /** @type {((message: string) => void)|null} Колбэк для отправки асинхронных сообщений в UI (например, во время боя). */
     this.onMessage = null; // Колбэк для отправки асинхронных сообщений (бой и т.д.)
 
     this._loadCommands();
@@ -94,8 +107,8 @@ export class GameEngine {
 
   /**
    * Обрабатывает команду игрока
-   * @param {string} input - текстовый ввод
-   * @returns {string} результат выполнения
+   * @param {string} input - Текстовая строка, введенная игроком.
+   * @returns {Promise<string|null>} Результат выполнения команды в виде HTML-форматированной строки или null.
    */
   async processCommand(input) {
     const result = await this.commandManager.execute(input);
@@ -166,6 +179,7 @@ export class GameEngine {
   /**
    * Начинает бой с указанным NPC.
    * @param {import('./classes/NPC').NPC} npc - Цель для атаки.
+   * @returns {void}
    */
   startCombat(npc) {
     if (this.combatManager) {
@@ -178,7 +192,7 @@ export class GameEngine {
 
   /**
    * Завершает бой
-   * @param {boolean} playerFled - игрок сбежал?
+   * @returns {void}
    */
   stopCombat() {
     this.combatManager = null;
@@ -283,7 +297,7 @@ export class GameEngine {
 
   /**
    * Получает текущую локацию игрока
-   * @returns {Room} объект локации
+   * @returns {import('./classes/Room.js').Room|undefined} Объект текущей локации или undefined, если не найден.
    */
   getCurrentRoom() {
     return this.world.rooms.get(this.player.currentRoom);
@@ -293,7 +307,7 @@ export class GameEngine {
    * Получает предмет по ID
    * @param {string} localId - Локальный ID предмета
    * @param {string} areaId - ID зоны, в которой находится предмет
-   * @returns {Object|null} данные предмета
+   * @returns {object|null} Данные предмета или null, если не найден.
    */
   getItem(localId, areaId) {
     return this.world.getItem(localId, areaId);
@@ -303,7 +317,7 @@ export class GameEngine {
    * Получает НПС по ID
    * @param {string} localId - Локальный ID НПС
    * @param {string} areaId - ID зоны, в которой находится НПС
-   * @returns {NPC|null} объект НПС
+   * @returns {import('./classes/NPC.js').NPC|null} Объект НПС или null, если не найден.
    */
   getNpc(localId, areaId) {
     return this.world.getNpc(localId, areaId);
@@ -325,6 +339,7 @@ export class GameEngine {
   }
   /**
    * Сохранение игры в localStorage
+   * @returns {void}
    */
   saveGame() {
     const gameData = {
@@ -379,7 +394,7 @@ export class GameEngine {
 
   /**
    * Загрузка игры из localStorage
-   * @returns {boolean} успешна ли загрузка
+   * @returns {Promise<boolean>} `true` в случае успешной загрузки, иначе `false`.
    */
   async loadGame() {
     const saveData = localStorage.getItem('mudgame_save');
@@ -444,6 +459,7 @@ export class GameEngine {
   /**
    * Начинает новую игру
    * @param {string} [playerName='Игрок'] - Имя игрока.
+   * @returns {Promise<string>} Приветственное сообщение.
    */
   async startNewGame(playerName = 'Игрок') {
     this._resetWorldState();
@@ -468,8 +484,8 @@ ${this.getCurrentRoom().getFullDescription(this)}
 
   /**
    * Получает последние сообщения
-   * @param {number} count - количество сообщений
-   * @returns {Array<string>} массив сообщений
+   * @param {number} [count=10] - Количество запрашиваемых сообщений.
+   * @returns {string[]} Массив сообщений.
    */
   getRecentMessages(count = 10) {
     return this.messageHistory.slice(-count);
@@ -477,7 +493,7 @@ ${this.getCurrentRoom().getFullDescription(this)}
 
   /**
    * Получает список доступных для перехода комнат из текущей локации
-   * @returns {Array<string>} массив ID комнат
+   * @returns {string[]} Массив глобальных ID комнат.
    */
   getAvailableRooms() {
     const currentRoom = this.getCurrentRoom();
@@ -491,8 +507,8 @@ ${this.getCurrentRoom().getFullDescription(this)}
   /**
    * Переходит в указанную комнату, если это возможно
    * @param {string} targetRoomId - Глобальный ID целевой комнаты.
-   * @param {string} direction - Направление, для вывода сообщения
-   * @returns {Promise<{success: boolean, message: string}>} результат перехода
+   * @param {string} [direction='куда-то'] - Направление, для вывода сообщения.
+   * @returns {Promise<{success: boolean, message: string}>} Результат перехода.
    */
   async moveToRoom(targetRoomId, direction = 'куда-то') {
     if (this.player.state === 'fighting') {

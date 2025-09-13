@@ -299,10 +299,10 @@ npc_damage = roll(npc.damage);
   - `CommandManager`
   - `TickManager`
   - `CombatManager`
-  - `SaveManager`
+  - `ActionGenerator`
 
 > Архитектура позволяет легко масштабировать и поддерживать проект.
 
 ---
 
-> ✅ *Circle MUD Clone — это модульная, расширяемая текстовая RPG с глубокой механикой и классической MUD-эстетикой.*
+> ✅ *Circle MUD Clone — это модульная, расширяемая текстовая RPG с глубокой игровой механикой и классической MUD-эстетикой.*

@@ -20,10 +20,14 @@ export class Room {
     this.area = roomData.area;
     this.name = roomData.name;
     this.description = roomData.description;
+    /** @type {{x: number, y: number}} Координаты комнаты на карте. */
     this.map = roomData.map; // Координаты комнаты на карте {x, y}
+    /** @type {Map<string, string|object>} Карта выходов, где ключ - направление, а значение - ID комнаты или объект перехода. */
     this.exits = new Map(Object.entries(roomData.exits || {}));
     // Преобразуем локальные ID предметов в глобальные при создании комнаты
+    /** @type {string[]} Массив глобальных ID предметов в комнате. */
     this.items = (roomData.items || []).map(localId => `${roomData.area}:${localId}`);
+    /** @type {string[]} Массив локальных ID NPC в комнате. */
     this.npcs = [...(roomData.npcs || [])]; // NPC остаются с локальными ID, т.к. они не перемещаются между зонами (пока)
   }
 
@@ -112,7 +116,7 @@ export class Room {
 
   /**
    * Генерирует полное, отформатированное описание комнаты для команды 'look'.
-   * @param {import('../GameEngine').GameEngine} game - Ссылка на игровой движок для получения данных о предметах/NPC.
+   * @param {import('../GameEngine.js').GameEngine} game - Ссылка на игровой движок для получения данных о предметах/NPC.
    * @returns {string} HTML-отформатированное описание комнаты.
    */
   getFullDescription(game) {
@@ -179,7 +183,7 @@ export class Room {
   /**
    * Находит глобальный ID предмета в комнате по его имени или ID.
    * @param {string} targetName - Имя или ID для поиска (может быть частичным).
-   * @param {import('../GameEngine').GameEngine} game - Экземпляр движка для получения данных о предмете.
+   * @param {import('../GameEngine.js').GameEngine} game - Экземпляр движка для получения данных о предмете.
    * @returns {string|null} Глобальный ID предмета или null, если не найден.
    */
   findItem(targetName, game) {
@@ -192,7 +196,7 @@ export class Room {
   /**
    * Находит локальный ID живого NPC в комнате по его имени или ID.
    * @param {string} targetName - Имя или ID для поиска (может быть частичным).
-   * @param {import('../GameEngine').GameEngine} game - Экземпляр движка для получения данных о NPC.
+   * @param {import('../GameEngine.js').GameEngine} game - Экземпляр движка для получения данных о NPC.
    * @param {string} areaId - ID текущей зоны.
    * @returns {string|null} Локальный ID NPC или null, если не найден.
    */

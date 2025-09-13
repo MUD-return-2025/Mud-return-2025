@@ -1,5 +1,6 @@
 
 import { DamageParser } from "../utils/damageParser.js";
+
 /**
  * Представляет игрока, управляя его состоянием, характеристиками,
  * инвентарем и действиями в игровом мире.
@@ -18,30 +19,55 @@ export class Player {
    * @param {string} [name='Игрок'] - Имя игрока.
    */
   reset(name = 'Игрок') {
+    /** @type {string} Имя игрока. */
     this.name = name;
+    /** @type {number} Текущий уровень. */
     this.level = 1;
+    /** @type {number} Текущий опыт. */
     this.experience = 0;
+    /** @type {number} Опыт, необходимый для следующего уровня. */
     this.experienceToNext = 100;
+    /** @type {number} Текущее здоровье. */
     this.hitPoints = 20;
+    /** @type {number} Максимальное здоровье. */
     this.maxHitPoints = 20;
+    /** @type {number} Текущая выносливость. */
     this.stamina = 100;
+    /** @type {number} Максимальная выносливость. */
     this.maxStamina = 100;
+    /** @type {number} Сила. */
     this.strength = 10;
+    /** @type {number} Ловкость. */
     this.dexterity = 10;
+    /** @type {number} Телосложение. */
     this.constitution = 10;
+    /** @type {number} Интеллект. */
     this.intelligence = 10;
+    /** @type {number} Мудрость. */
     this.wisdom = 10;
+    /** @type {number} Харизма. */
     this.charisma = 10;
-    this.inventory = [];
+    /** @type {object[]} Инвентарь игрока. */
+    this.inventory = []; // Массив объектов предметов
+    /** @type {string} Глобальный ID текущей комнаты. */
     this.currentRoom = 'midgard:center';
+    /** @type {'idle'|'fighting'|'dead'} Состояние игрока. */
     this.state = 'idle';
+    /** @type {object|null} Экипированное оружие. */
     this.equippedWeapon = null;
+    /** @type {object|null} Экипированная броня. */
     this.equippedArmor = null;
+    /** @type {string[]} Массив ID изученных умений. */
     this.skills = []; // Используем массив вместо Set
+    /** @type {number} Количество золота. */
     this.gold = 100; // Стартовое золото
+    /** @type {Object.<string, number>} Время перезарядки умений. */
     this.skillCooldowns = {};
+    /** @type {string|null} ID умения, которое будет использовано при следующей атаке. */
     this.nextAttackIsSkill = null;
+    /** @type {boolean} Флаг, использовалось ли умение в текущем раунде. */
     this.skillUsedThisRound = false;
+    /** @type {string|null} ID комнаты, в которой умер игрок. */
     this.deathRoom = null;
   }
 
@@ -141,7 +167,7 @@ export class Player {
 
   /**
    * Проверяет, изучено ли умение.
-   * @param {string} skillId - ID умения.
+   * @param {string} skillId - ID проверяемого умения.
    * @returns {boolean}
    */
   hasSkill(skillId) {
