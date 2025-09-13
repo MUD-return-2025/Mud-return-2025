@@ -1,0 +1,40 @@
+# .github/workflows/release.yml
+name: Create Release
+
+on:
+  push:
+    tags:
+      - 'v*' # Запускается при пуше тегов, например v1.0, v1.2.3
+
+jobs:
+  build-and-release:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write # Необходимо для создания релиза
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Build project
+        run: npm run build
+
+      - name: Archive production artifacts
+        run: zip -r mud-return-dist.zip dist
+
+      - name: Create Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: mud-return-dist.zip
+          body: |
+            Автоматически сгенерированный релиз.
+            Пожалуйста, отредактируйте описание, чтобы добавить информацию об изменениях.
