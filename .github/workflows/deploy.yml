@@ -1,0 +1,54 @@
+# Имя рабочего процесса, которое будет отображаться в GitHub
+name: Deploy to GitHub Pages
+
+# Условие для запуска: при каждом пуше в ветку 'main'
+on:
+  push:
+    branches:
+      - main
+
+# Разрешения для рабочего процесса, чтобы он мог публиковать на GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Задачи, которые будут выполняться
+jobs:
+  build-and-deploy:
+    # Используем последнюю версию Ubuntu
+    runs-on: ubuntu-latest
+    steps:
+      # 1. Клонируем ваш репозиторий
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      # 2. Настраиваем Node.js
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18' # Укажите вашу версию Node.js
+          cache: 'npm'
+
+      # 3. Устанавливаем зависимости
+      - name: Install dependencies
+        run: npm install
+
+      # 4. Собираем проект
+      - name: Build
+        run: npm run build
+
+      # 5. Настраиваем GitHub Pages
+      - name: Setup Pages
+        uses: actions/configure-pages@v5
+
+      # 6. Загружаем артефакт (собранные файлы из папки dist)
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: './dist'
+
+      # 7. Публикуем на GitHub Pages
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4

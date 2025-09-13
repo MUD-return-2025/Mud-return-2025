@@ -1,6 +1,9 @@
 import { Room } from './Room.js';
 import { NPC } from './NPC.js';
 
+// Загружаем все зоны с помощью Vite glob import.
+const areaModules = import.meta.glob('../data/areas/*.json');
+
 /**
  * @class WorldManager
  * @description Управляет состоянием игрового мира: зонами, комнатами, предметами и NPC.
@@ -11,6 +14,7 @@ export class WorldManager {
    */
   constructor(game) {
     this.game = game; // Ссылка на основной движок
+    this._areaDataCache = new Map(); // Кэш для данных зон
     this.reset();
   }
 
@@ -27,21 +31,34 @@ export class WorldManager {
   }
 
   /**
+   * Асинхронно инициализирует все зоны, загружая их данные в кэш.
+   */
+  async initialize() {
+    for (const path in areaModules) {
+      const areaIdMatch = path.match(/\/([^/]+)\.json$/);
+      if (areaIdMatch) {
+        const areaId = areaIdMatch[1];
+        const moduleLoader = areaModules[path];
+        const module = await moduleLoader();
+        this._areaDataCache.set(areaId, module.default);
+      }
+    }
+  }
+
+  /**
    * Загружает игровую зону (area) из JSON файла.
    * @param {string} areaId - ID зоны для загрузки (например, 'midgard').
    */
   async loadArea(areaId) {
     if (this.loadedAreaIds.has(areaId)) {
-      console.log(`Зона ${areaId} уже загружена.`);
       return true;
     }
 
-    try {
-      const response = await fetch(`/src/game/data/areas/${areaId}.json`);
-      if (!response.ok) {
-        throw new Error(`Не удалось загрузить зону: ${areaId}`);
-      }
-      const areaData = await response.json();
+    const areaData = this._areaDataCache.get(areaId);
+    if (!areaData) {
+      console.error(`Ошибка при загрузке зоны ${areaId}: зона не найдена в кэше.`);
+      return false;
+    }
 
       // Сохраняем метаданные зоны
       this.areas.set(areaId, {
@@ -68,12 +85,7 @@ export class WorldManager {
       this._buildNpcLocationMapForArea(areaId);
 
       this.loadedAreaIds.add(areaId);
-      console.log(`Зона ${areaId} успешно загружена.`);
       return true;
-    } catch (error) {
-      console.error(`Ошибка при загрузке зоны ${areaId}:`, error);
-      return false;
-    }
   }
 
   /**

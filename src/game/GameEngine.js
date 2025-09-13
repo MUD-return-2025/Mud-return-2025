@@ -9,6 +9,7 @@ import { SuggestionGenerator } from './classes/SuggestionGenerator.js';
 import { SaveManager } from './classes/SaveManager.js';
 import { MessageFormatter } from './utils/MessageFormatter.js';
 import { ActionGenerator } from './classes/ActionGenerator.js';
+import skillsJson from './data/skills.json';
 import commands from './commands/index.js';
 
 /**
@@ -64,7 +65,8 @@ export class GameEngine {
    * Должен вызываться асинхронно после создания экземпляра.
    */
   async initializeWorld() {
-    await this.world.loadArea('midgard');
+    await this.world.initialize(); // Предзагружаем все зоны
+    await this.world.loadArea('midgard'); // Загружаем стартовую зону
     await this.initializeSkills();
   }
 
@@ -73,12 +75,7 @@ export class GameEngine {
    */
   async initializeSkills() {
     try {
-      const response = await fetch(`/src/game/data/skills.json`);
-      if (!response.ok) {
-        throw new Error(`Не удалось загрузить умения.`);
-      }
-      const skillsData = await response.json();
-      for (const [id, data] of Object.entries(skillsData)) {
+      for (const [id, data] of Object.entries(skillsJson)) {
         this.skillsData.set(id, { id, ...data });
       }
     } catch (error) {
