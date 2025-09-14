@@ -6,7 +6,7 @@ import vue from "@vitejs/plugin-vue";
 // https://vitejs.dev/config/
 export default defineConfig({
   // Укажите здесь имя вашего репозитория на GitHub
-  base: "/Mud-return/",
+  base: "/",
   define: {
     __VUE_OPTIONS_API__: true,
     __VUE_PROD_DEVTOOLS__: false,
